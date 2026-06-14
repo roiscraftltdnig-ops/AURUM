@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: aurum-ai-backend
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aurum-ai-redis
+          property: connectionString
+
+  - type: web
+    name: aurum-ai-admin
+    runtime: node
+    plan: starter
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: node .next/standalone/server.js
+    autoDeploy: true
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://aurum-ai-backend.onrender.com
+
+  - type: redis
+    name: aurum-ai-redis
+    plan: starter
+    ipAllowList: []

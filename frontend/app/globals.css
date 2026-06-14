@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #07080d;
+  color: #f6f2e8;
+}
+
+* {
+  box-sizing: border-box;
+}

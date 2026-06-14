@@ -1,0 +1,94 @@
+{
+  "brand": {
+    "official_name": "ROISCRAFT",
+    "description": "Training and investment advisory ecosystem",
+    "primary_cta": "Educate, qualify, and route users into the right advisory path"
+  },
+  "portfolios": [
+    {
+      "key": "roiscraft",
+      "name": "ROISCRAFT",
+      "stage": "BEGINNER",
+      "description": "Parent training and investment advisory ecosystem."
+    },
+    {
+      "key": "aurum_foundation",
+      "name": "Aurum Foundation",
+      "stage": "INTERMEDIATE",
+      "description": "Portfolio pathway requiring education-first onboarding."
+    },
+    {
+      "key": "bytnet",
+      "name": "Bytnet",
+      "stage": "INTERMEDIATE",
+      "description": "Portfolio pathway requiring source-grounded explanation from uploaded materials."
+    }
+  ],
+  "resources": [
+    {
+      "key": "roiscraft_overview",
+      "title": "ROISCRAFT Overview",
+      "path": "knowledge_base/roiscraft/overview.md",
+      "portfolio": "ROISCRAFT",
+      "stage": "BEGINNER",
+      "public": true,
+      "share_once": false
+    },
+    {
+      "key": "roiscraft_faqs",
+      "title": "ROISCRAFT FAQs",
+      "path": "knowledge_base/roiscraft/faqs.md",
+      "portfolio": "ROISCRAFT",
+      "stage": "BEGINNER",
+      "public": true,
+      "share_once": false
+    },
+    {
+      "key": "aurum_foundation_overview",
+      "title": "Aurum Foundation Overview",
+      "path": "knowledge_base/aurum_foundation/overview.md",
+      "portfolio": "Aurum Foundation",
+      "stage": "INTERMEDIATE",
+      "public": true,
+      "share_once": false
+    },
+    {
+      "key": "bytnet_overview",
+      "title": "Bytnet Overview",
+      "path": "knowledge_base/bytnet/overview.md",
+      "portfolio": "Bytnet",
+      "stage": "INTERMEDIATE",
+      "public": true,
+      "share_once": false
+    },
+    {
+      "key": "onboarding_journeys",
+      "title": "ROISCRAFT Onboarding Journeys",
+      "path": "knowledge_base/onboarding/journeys.md",
+      "portfolio": "ROISCRAFT",
+      "stage": "BEGINNER",
+      "public": false,
+      "share_once": false
+    },
+    {
+      "key": "disclaimers",
+      "title": "Compliance And Risk Disclaimers",
+      "path": "knowledge_base/compliance/disclaimers.md",
+      "portfolio": "ROISCRAFT",
+      "stage": "BEGINNER",
+      "public": true,
+      "share_once": false
+    }
+  ],
+  "qualification": {
+    "beginner_signals": ["what is", "how does it work", "i am new", "explain", "basics"],
+    "intermediate_signals": ["compare", "difference", "i have read", "how do i start", "which one"],
+    "advanced_signals": ["risk", "track record", "history", "license", "due diligence", "proof", "company age"],
+    "high_intent_signals": ["i want to invest", "i want to join", "call me", "i am ready", "how much", "vip", "private discussion", "participate"]
+  },
+  "contact_fields": {
+    "required": ["name", "phone_number"],
+    "optional": ["email", "country", "telegram_username", "interest_area"],
+    "priority": "phone_number"
+  }
+}
