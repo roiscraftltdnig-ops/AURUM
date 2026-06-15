@@ -25,7 +25,7 @@ services:
     autoDeploy: true
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
-        value: https://aurum-ai-backend.onrender.com
+        value: https://aurum-ai-backend-docker.onrender.com
 
   - type: redis
     name: aurum-ai-redis

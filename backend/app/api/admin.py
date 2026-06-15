@@ -10,7 +10,7 @@ from app.services.rag import ingest_document
 from app.services.telegram import telegram
 from app.core.config import get_settings
 from app.workers.broadcasts import dispatch_broadcast
-from app.workers.reports import generate_daily_report
+from app.workers.reports import send_daily_report_to_admins
 from app.workers.webinars import schedule_webinar_campaign
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -114,9 +114,7 @@ async def schedule_webinar(payload: dict) -> dict:
 
 @router.post("/reports/daily")
 async def daily_report() -> dict:
-    report = await generate_daily_report()
-    await notify_admins("Daily ROISCRAFT intelligence report", report["telegram_text"])
-    return report
+    return await send_daily_report_to_admins()
 
 
 @router.post("/telegram/webhook")

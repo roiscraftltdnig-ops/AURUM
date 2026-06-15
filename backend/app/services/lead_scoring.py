@@ -7,11 +7,11 @@ ESCALATION_TERMS = {
     "admin", "administrator", "account assistance", "direct contact", "requesting contact",
 }
 CONTACT_TERMS = {"my phone", "my number", "email me", "call me", "whatsapp me", "contact me"}
-JOIN_TERMS = {"how to join", "how can i join", "join", "get started", "onboard", "sign up", "how do i start"}
-READY_TERMS = {"ready to start", "i am ready", "i'm ready", "ready now", "i want to proceed", "proceed", "let me start"}
-REGISTRATION_TERMS = {"register me", "registration", "i want to register", "connect me", "admin assistance", "representative", "agent"}
-MINIMUM_DEPOSIT_TERMS = {"minimum deposit", "minimum amount", "least amount", "how much do i need", "how much to start", "start with"}
-PLAN_TERMS = {"plan", "plans", "withdrawal", "withdrawals", "earn", "profit", "return", "returns"}
+JOIN_TERMS = {"how to join", "how can i join", "join", "get started", "onboard", "sign up", "how do i start", "how do i join"}
+READY_TERMS = {"ready to start", "i am ready", "i'm ready", "ready now", "i want to proceed", "proceed", "let me start", "i want to start", "i want to deposit", "buy credit"}
+REGISTRATION_TERMS = {"register me", "registration", "i want to register", "connect me", "admin assistance", "representative", "agent", "open account"}
+MINIMUM_DEPOSIT_TERMS = {"minimum deposit", "minimum amount", "least amount", "how much do i need", "how much to start", "start with", "start small"}
+PLAN_TERMS = {"plan", "plans", "withdrawal", "withdrawals", "earn", "profit", "return", "returns", "deposit", "how much can i earn", "how do i deposit"}
 PRODUCT_TERMS = {"product", "products", "opportunity", "opportunities", "service", "services", "offering", "offerings"}
 ADVANCED_TERMS = {"tokenomics", "liquidity", "ecosystem", "governance", "institutional", "strategy"}
 BEGINNER_TERMS = {"what is", "explain", "beginner", "new to", "basics", "learn", "crypto", "tell me about"}
@@ -36,38 +36,42 @@ def qualify_message(text: str, current_score: int = 0) -> Qualification:
         score = min(100, current_score)
         return Qualification(stage_for_score(score), temperature_for_score(score), 0, False, [])
 
+    def move_to(target_score: int) -> None:
+        nonlocal delta
+        delta = max(delta, max(0, target_score - current_score))
+
     if any(term in lowered for term in BEGINNER_TERMS):
-        delta = max(delta, 5)
+        move_to(10)
         reasons.append("Education-stage question")
     if any(term in lowered for term in PRODUCT_TERMS):
-        delta = max(delta, 10)
+        move_to(20)
         reasons.append("Product interest")
     if any(term in lowered for term in ["ex-ai", "ex ai", "exai", "neobank", "neo bank", "zeus"]):
-        delta = max(delta, 15)
+        move_to(30)
         reasons.append("Specific Aurum product interest")
     if any(term in lowered for term in PLAN_TERMS):
-        delta = max(delta, 20)
+        move_to(40)
         reasons.append("Plans or transaction question")
     if any(term in lowered for term in MINIMUM_DEPOSIT_TERMS):
-        delta = max(delta, 30)
+        move_to(60)
         reasons.append("Minimum deposit question")
     if any(term in lowered for term in JOIN_TERMS):
-        delta = max(delta, 40)
+        move_to(80)
         reasons.append("Join/onboarding question")
     if any(term in lowered for term in READY_TERMS):
-        delta = max(delta, 50)
+        move_to(100)
         reasons.append("Ready-to-start signal")
     if any(term in lowered for term in REGISTRATION_TERMS):
-        delta = max(delta, 70)
+        move_to(100)
         reasons.append("Registration or admin assistance requested")
     if any(term in lowered for term in ADVANCED_TERMS):
-        delta = max(delta, 15)
+        move_to(30)
         reasons.append("Advanced ecosystem vocabulary")
     if any(term in lowered for term in ESCALATION_TERMS):
-        delta = max(delta, 70)
+        move_to(100)
         reasons.append("Human support requested")
     if any(term in lowered for term in CONTACT_TERMS):
-        delta = max(delta, 70)
+        move_to(100)
         reasons.append("Contact follow-up requested")
 
     score = min(100, current_score + delta)

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     ai_model: str = "gpt-4o"
     embedding_model: str = "text-embedding-3-small"
     openai_transcription_model: str = "gpt-4o-mini-transcribe"
+    daily_report_hour_utc: int = 17
 
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 

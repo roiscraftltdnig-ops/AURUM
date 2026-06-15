@@ -15,12 +15,16 @@ async def schedule_webinar_campaign(payload: dict[str, Any]) -> dict[str, Any]:
     starts_at = parse_webinar_time(payload["starts_at"])
     link = payload["link"]
     segment = payload.get("segment") or {"temperature": "all", "stage": "all"}
+    segment = {**segment, "_webinar_link": link, "_webinar_title": title}
 
+    timezone_label = payload.get("timezone") or payload.get("time_zone") or "UTC"
     reminders = [
-        (-60, f"Hello {{name}}, our Aurum webinar begins in one hour. This is a great opportunity to understand the products, ask questions, and learn more."),
-        (-45, f"We are getting closer to today's Aurum webinar. We look forward to having you with us."),
-        (-15, f"The webinar starts in 15 minutes. Here is your access link: {link}"),
-        (0, f"We are live now. Join the Aurum webinar here: {link}"),
+        (-1440, f"Hello {{name}}, tomorrow we have a special Aurum educational session: {title}. It is designed to help you understand the products, risks, plans, and next steps clearly. Time zone: {timezone_label}."),
+        (-60, f"Hello {{name}}, the Aurum webinar starts in one hour. This is a good session to understand the products, ask questions, and decide what you need clarified before any next step. Access link: {{tracking_link}}"),
+        (-45, f"Only 45 minutes to go before the Aurum webinar. Keep your questions ready, especially around EX-AI Bot, plans, withdrawals, and risk. Access link: {{tracking_link}}"),
+        (-15, f"We're starting shortly. The Aurum webinar begins in 15 minutes. Here is your access link: {{tracking_link}}"),
+        (-5, f"We are live in 5 minutes. Join here when you are ready: {{tracking_link}}"),
+        (0, f"We are live now. Join the Aurum webinar here: {{tracking_link}}"),
         (90, f"Thank you for attending. What part of today's session interested you the most?"),
     ]
 

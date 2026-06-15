@@ -27,6 +27,23 @@ class TelegramService:
             response = await client.post(f"{self.api}/sendMessage", json=payload)
             response.raise_for_status()
 
+    async def send_document_bytes(
+        self,
+        chat_id: str | int,
+        filename: str,
+        content: bytes,
+        caption: str | None = None,
+    ) -> None:
+        if not self.api:
+            return
+        data: dict[str, Any] = {"chat_id": str(chat_id)}
+        if caption:
+            data["caption"] = caption[:1024]
+        files = {"document": (filename, content, "application/pdf")}
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(f"{self.api}/sendDocument", data=data, files=files)
+            response.raise_for_status()
+
     async def get_file_path(self, file_id: str) -> str | None:
         if not self.api:
             return None

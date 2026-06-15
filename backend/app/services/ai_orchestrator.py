@@ -153,6 +153,53 @@ The minimum starting plan referenced in Aurum materials is 100 USDT. Users askin
 ROISCRAFT's role is education-first onboarding: users should understand the product, risk, participation process, and practical expectations before taking action. Conversations should be clear, balanced, and never promise guaranteed profits or risk-free returns.
 """
 
+INVESTMENT_PLAN_TEXT = (
+    "Aurum's entry point starts from the Basic Plan at 100 USDT. Beyond that, the plan family includes higher participation categories such as Standard, Comfort, Optimal, Business, VIP, and Luxury-style levels, but the exact fit should be confirmed with the team based on the user's range and readiness.\n\n"
+    "The important thing is not just the amount. A user should understand the product, the risk side, the withdrawal process, and what they personally expect before starting."
+)
+
+INVESTMENT_INTENT_PHRASES = [
+    "minimum deposit",
+    "minimum amount",
+    "how much do i need",
+    "how much to start",
+    "start with",
+    "start small",
+    "how do i join",
+    "how can i join",
+    "how do i start",
+    "get started",
+    "how do i deposit",
+    "deposit",
+    "plans",
+    "plan",
+]
+
+RETURN_INTENT_PHRASES = [
+    "how much can i earn",
+    "how much will i earn",
+    "profit",
+    "profits",
+    "returns",
+    "return",
+    "earn",
+    "roi",
+]
+
+READY_INTENT_PHRASES = [
+    "i want to start",
+    "i want to register",
+    "register me",
+    "i am ready",
+    "i'm ready",
+    "ready to start",
+    "ready now",
+    "connect me",
+    "speak with admin",
+    "talk to admin",
+    "buy credit",
+]
+
 
 SYSTEM_PROMPT = """You are the Aurum Foundation AI Community Guide inside Telegram.
 You are not a generic ecosystem chatbot, menu bot, PDF reader, or sales script.
@@ -478,6 +525,37 @@ def fallback_answer(topic: str, user_text: str) -> str:
     )
 
 
+def sales_reply_if_applicable(user_text: str, memory: dict[str, Any]) -> str | None:
+    lowered = user_text.lower()
+    if any(phrase in lowered for phrase in READY_INTENT_PHRASES):
+        return (
+            "Excellent. I'll connect you with the Aurum support team so they can guide you through the next steps.\n\n"
+            "Before I pass this properly, please share your WhatsApp number and the amount range you are considering. That helps the team guide you with the right plan instead of guessing."
+        )
+
+    if any(phrase in lowered for phrase in INVESTMENT_INTENT_PHRASES):
+        return (
+            "That's a practical question, and it usually means you're moving from curiosity into decision mode.\n\n"
+            f"{INVESTMENT_PLAN_TEXT}\n\n"
+            "Can I ask what investment range you are considering? I can then guide you toward the most suitable next step."
+        )
+
+    if any(phrase in lowered for phrase in RETURN_INTENT_PHRASES):
+        return (
+            "That's an important question, especially because returns should never be treated casually.\n\n"
+            "Aurum discussions around earning are tied to the product and plan structure, but ROISCRAFT should not present profit as guaranteed. The right way to look at it is: understand the plan, the risk, the withdrawal process, and then let the team explain the current figures that apply.\n\n"
+            "Are you mainly trying to understand possible returns, or are you comparing whether the risk makes sense for you?"
+        )
+
+    if memory.get("current_topic") in {"Minimum deposit", "Aurum plans"} and is_followup(user_text):
+        return (
+            f"Earlier we were discussing Aurum plans. {INVESTMENT_PLAN_TEXT}\n\n"
+            "The next useful step is knowing your range and whether you are still learning or already considering registration."
+        )
+
+    return None
+
+
 def response_directive(portfolio: str | None, user_text: str) -> str:
     lowered = user_text.lower()
     wants_explanation = any(phrase in lowered for phrase in ["explain", "tell me", "what is", "who is", "about", "foundation"])
@@ -540,6 +618,11 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
             "I'm here to help you understand Aurum's products, services, and opportunities. What would you like to learn about today?"
         )
         return {"text": text, "buttons": [], "qualification": qualification, "context": [], "portfolio": portfolio, "topic": topic, "source_labels": [], "confidence": "none", "confidence_score": 0, "missing_knowledge": False, "missing_video": False}
+
+    sales_text = sales_reply_if_applicable(user_text, memory)
+    if sales_text:
+        text = polish_public_reply(sales_text, memory, topic)
+        return {"text": text, "buttons": [], "qualification": qualification, "context": [], "portfolio": portfolio, "topic": topic, "source_labels": [], "confidence": "high", "confidence_score": 1, "missing_knowledge": False, "missing_video": False}
 
     requested_video_key = video_key_for_request(user_text, portfolio)
     if requested_video_key and not resources.get(requested_video_key):

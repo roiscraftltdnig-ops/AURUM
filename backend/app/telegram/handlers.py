@@ -56,6 +56,12 @@ def extract_profile_updates(text: str, memory: dict[str, Any]) -> tuple[dict[str
     if phone_match:
         updates["phone_number"] = re.sub(r"[^\d+]", "", phone_match.group(1))
 
+    amount_match = re.search(r"(\$?\s*\d[\d,]*(?:\.\d+)?\s*(?:usdt|usd|dollars?)?)", text, re.IGNORECASE)
+    if amount_match and any(term in lowered for term in ["range", "budget", "start", "deposit", "invest", "considering", "with"]):
+        amount = " ".join(amount_match.group(1).upper().replace("$", "USD ").split())
+        memory_updates["preferred_investment_range"] = amount
+        updates["investment_intent"] = amount
+
     country_match = re.search(r"(?:i am from|i'm from|from|in)\s+([A-Za-z][A-Za-z '\-]{1,40})", text, re.IGNORECASE)
     if country_match:
         country = country_match.group(1).strip()
@@ -185,12 +191,12 @@ def handoff_confirmation(user: dict[str, Any], memory: dict[str, Any]) -> str:
     if not phone:
         memory["pending_profile_field"] = "phone_number"
         return (
-            f"{prefix} I will notify the Aurum team so a representative can guide you through the next step.\n\n"
-            "Please share your WhatsApp number as well, so they know the best way to reach you."
+            f"{prefix} I'll connect you with the Aurum support team so they can guide you through the next steps.\n\n"
+            "Please share your WhatsApp number and, if you already know it, the investment range you are considering. That helps the team guide you properly."
         )
     return (
-        f"{prefix} I will notify the Aurum team, and a representative will contact you shortly to guide you through the registration process.\n\n"
-        "While you wait, keep any question you have in mind so the team can address it clearly."
+        f"{prefix} I'll connect you with the Aurum support team so they can guide you through the next steps.\n\n"
+        "A representative will contact you shortly. While you wait, keep any question you have in mind so the team can address it clearly."
     )
 
 
@@ -209,6 +215,7 @@ async def build_lead_summary(user: dict[str, Any], memory: dict[str, Any], score
         f"Telegram: @{user.get('telegram_username') or user.get('telegram_id')}\n"
         f"WhatsApp: {profile.get('phone_number') or user.get('phone_number') or 'Not collected'}\n"
         f"Country: {profile.get('country') or user.get('country') or 'Not collected'}\n"
+        f"Preferred investment range: {memory.get('preferred_investment_range') or user.get('investment_intent') or 'Not collected'}\n"
         f"Customer journey stage: {memory.get('customer_journey_stage') or memory.get('decision_stage') or 'Awareness'}\n"
         f"Lead score: {score}\n"
         f"Lead temperature: {user.get('lead_temperature') or memory.get('lead_temperature') or 'COLD'}\n"
@@ -393,6 +400,7 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
     else:
         memory["customer_journey_stage"] = "Curious visitor"
     memory["decision_stage"] = decision_stage_for_score(new_score)
+    high_intent_alert_needed = new_score >= 80 and not memory.get("high_intent_alert_sent")
     if ai["qualification"].escalation_required:
         ai["text"] = handoff_confirmation(user, memory)
     else:
@@ -424,8 +432,10 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
         summary = f"Media review '{missing_resource}' requested by @{user.get('telegram_username') or user.get('telegram_id')}: {text}"
         await create_content_task(user, f"Media review: {missing_resource}", summary, "Add the requested media URL in the admin resource center and retest the request.")
         await notify_admins("Aurum media review", summary, exclude_chat_id=chat_id)
-    if ai["qualification"].escalation_required:
+    if ai["qualification"].escalation_required or high_intent_alert_needed:
         summary = await build_lead_summary(user, memory, new_score, text)
         await create_admin_task(user, summary, "high", "Review conversation, collect contact details, and route into VIP/investor onboarding.")
         await notify_admins("High-intent investor signal", summary, exclude_chat_id=chat_id)
+        memory["high_intent_alert_sent"] = True
+        await save_memory(user["id"], memory)
     return {"ok": True}
