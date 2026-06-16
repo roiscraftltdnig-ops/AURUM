@@ -4,6 +4,13 @@ from openai import AsyncOpenAI
 from app.core.config import get_settings
 from app.services.lead_scoring import qualify_message
 from app.services.rag import retrieve_context
+from app.services.sales_intelligence import (
+    all_plan_ranges_text,
+    extract_investment_amount,
+    parse_amount_label,
+    plan_summary_for_amount,
+    sales_state_for_prompt,
+)
 
 
 ECOSYSTEM_TERMS = [
@@ -149,16 +156,19 @@ INTENT_EXPANSIONS = {
 
 AURUM_BASE_CONTEXT = """
 Aurum Foundation is presented as a ROISCRAFT-guided fintech opportunity focused on AI-powered trading tools, digital asset education, and financial-service products. The ecosystem includes EX-AI Bot, EX-AI Pro, NeoBank, and Zeus AI Bot, with each product serving a different role across trading automation, advanced market support, and digital banking-style services.
-The minimum starting plan referenced in Aurum materials is 100 USDT. Users asking about plans, minimum deposit, or withdrawals should receive clear practical guidance with risk-aware education.
+The minimum starting plan is 100 USDT. Plan ranges are Basic 100-249 USDT, Standard 250-999 USDT, Comfort 1,000-2,499 USDT, Optimal 2,500-4,999 USDT, Business 5,000-9,999 USDT, VIP 10,000-24,999 USDT, Luxury 25,000-49,999 USDT, and Ultimate 50,000-99,999 USDT.
+Profit accrues daily, withdrawals are available, the minimum withdrawal amount is 25 USDT, processing may take up to 48 hours, blockchain fees may apply, and activation occurs within 12-24 hours after deposit. EX-AI Pro has an example return shown as up to 10% monthly, but returns are not guaranteed and actual outcomes may differ.
 ROISCRAFT's role is education-first onboarding: users should understand the product, risk, participation process, and practical expectations before taking action. Conversations should be clear, balanced, and never promise guaranteed profits or risk-free returns.
 """
 
 INVESTMENT_PLAN_TEXT = (
-    "Aurum's entry point starts from the Basic Plan at 100 USDT. Beyond that, the plan family includes higher participation categories such as Standard, Comfort, Optimal, Business, VIP, and Luxury-style levels, but the exact fit should be confirmed with the team based on the user's range and readiness.\n\n"
-    "The important thing is not just the amount. A user should understand the product, the risk side, the withdrawal process, and what they personally expect before starting."
+    "Aurum's entry point starts from the Basic Plan at 100 USDT. The listed ranges are:\n"
+    f"{all_plan_ranges_text()}\n\n"
+    "Profit accrues daily, withdrawals are available from 25 USDT, processing may take up to 48 hours, and activation usually happens within 12-24 hours after deposit. The exact account fit should still be confirmed before payment."
 )
 
 INVESTMENT_INTENT_PHRASES = [
+    "minimum",
     "minimum deposit",
     "minimum amount",
     "how much do i need",
@@ -215,6 +225,7 @@ Risk direction: every trading, investment, digital asset, or portfolio opportuni
 Handoff direction: when a user shows serious intent, ask for name and phone number first. Email is useful but secondary.
 Never invent licenses, sales figures, partnerships, or regulatory approvals unless trusted internal Aurum knowledge explicitly supports them.
 Sales direction: guide users from curiosity to an informed decision without pressure. Recognize buying signals, answer clearly, handle objections with empathy, and move the conversation forward naturally.
+Sales memory direction: every reply must consider conversation_stage, intent_level, investment_interest, products_interested_in, concerns, and recommended_next_action when those exist.
 
 Conversation rules:
 - Acknowledge before answering with a short human phrase such as "Great question.", "That's a good place to start.", or "That makes sense." Vary it naturally.
@@ -229,6 +240,9 @@ Conversation rules:
 - Create curiosity when appropriate. Mention what usually surprises people, what most users ask first, or what becomes relevant later.
 - Use light user narratives occasionally: "Most people first try to understand...", "Someone completely new would usually start here...", "Many users ask this same question first..."
 - If the user asks for minimum deposit, answer clearly that the minimum starting plan is 100 USDT, then briefly explain that they should understand the plan, risk, and withdrawal process before starting.
+- If the user shares an amount, match it to the correct plan range first and then guide them toward activation or team confirmation. Do not go backward into generic education.
+- If the user asks about earnings, answer using known plan/withdrawal structure and only mention the EX-AI Pro up-to-10% monthly example when relevant. Do not invent a fixed return for every plan.
+- Do not repeat risk warnings unless the user asks about risk, safety, guarantees, earnings, or payment. When risk is relevant, keep it short and practical.
 - If the user is afraid, skeptical, or worried, acknowledge the concern first and explain calmly. Never argue.
 - If the user says they are ready to join/register/proceed, affirm positively and let them know an Aurum representative will guide them.
 - Do not rely on inline buttons. The conversation should work naturally through text or voice.
@@ -436,6 +450,8 @@ def polish_public_reply(text: str, memory: dict[str, Any], topic: str | None = N
     cleaned = sanitize_public_reply(text)
     cleaned = remove_back_to_back_question(cleaned, memory)
     cleaned = limit_reply_length(cleaned)
+    if memory.get("conversation_stage") in {"INVESTMENT_CONSIDERATION", "HIGH_INTENT", "REGISTRATION_HANDOFF"}:
+        return cleaned
     bridge = conversation_bridge(topic, cleaned)
     if bridge:
         cleaned = f"{cleaned}\n\n{bridge}"
@@ -525,26 +541,113 @@ def fallback_answer(topic: str, user_text: str) -> str:
     )
 
 
+def remembered_amount(memory: dict[str, Any]) -> float | None:
+    value = memory.get("investment_amount")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return parse_amount_label(memory.get("preferred_investment_range") or memory.get("investment_interest"))
+
+
+def user_name(memory: dict[str, Any]) -> str | None:
+    profile = memory.get("profile") or {}
+    return profile.get("first_name") or memory.get("first_name")
+
+
+def objection_reply(user_text: str, memory: dict[str, Any]) -> str | None:
+    lowered = user_text.lower()
+    if any(term in lowered for term in ["not enough", "expensive", "too much", "can't afford", "cannot afford", "no money"]):
+        return (
+            "That makes sense. You do not have to stretch beyond what feels comfortable.\n\n"
+            "Aurum's listed entry point starts from 100 USDT, so some users begin at the Basic level and only increase later if they understand the system better. The smarter move is choosing a range you can evaluate calmly."
+        )
+    if any(term in lowered for term in ["scam", "real", "legit", "trust", "proof", "verify", "who owns"]):
+        return (
+            "That's a fair concern. Before anyone starts, they should understand the company direction, the products, how the AI trading tools work, and how withdrawals are handled.\n\n"
+            "Aurum is positioned around EX-AI Bot, EX-AI Pro, NeoBank, and Zeus AI Bot. The right next step is to verify the product flow and ask the team any account-specific questions before making payment."
+        )
+    if any(term in lowered for term in ["think", "later", "not now", "give me time"]):
+        return (
+            "Absolutely. A serious decision should not feel rushed.\n\n"
+            "While you think about it, the useful thing is to clarify one point that could affect your decision: the plan range, withdrawal process, or how EX-AI Bot actually works."
+        )
+    if any(term in lowered for term in ["risk", "lose", "loss", "guarantee", "guaranteed", "safe"]):
+        return (
+            "Good question. Aurum involves trading and digital-asset activity, so outcomes are not guaranteed and market conditions can affect results.\n\n"
+            "The practical way to look at it is to understand the plan, withdrawal rules, and product mechanics first, then only proceed with an amount that fits your comfort level."
+        )
+    return None
+
+
+def amount_plan_reply(amount: float, memory: dict[str, Any]) -> str:
+    summary = plan_summary_for_amount(amount)
+    name = user_name(memory)
+    prefix = f"Great, {name}." if name else "Great."
+    if not summary:
+        return (
+            f"{prefix} {amount:,.0f} USDT needs a quick team check because it sits outside the normal listed plan ranges.\n\n"
+            "The listed Aurum range starts from 100 USDT and runs up to the Ultimate range of 50,000-99,999 USDT. Should I connect you so the team confirms the best route before you move funds?"
+        )
+    return (
+        f"{prefix} {summary}\n\n"
+        "Here is the practical structure: profit accrues daily, withdrawals are available from 25 USDT, processing may take up to 48 hours, and activation usually happens within 12-24 hours after deposit.\n\n"
+        "Should I walk you through activation for that range?"
+    )
+
+
+def returns_reply(user_text: str, memory: dict[str, Any]) -> str:
+    amount = extract_investment_amount(user_text) or remembered_amount(memory)
+    if amount:
+        summary = plan_summary_for_amount(amount) or f"{amount:,.0f} USDT needs plan confirmation."
+        return (
+            f"Since you mentioned {amount:,.0f} USDT earlier, {summary[0].lower() + summary[1:]}\n\n"
+            "For earnings, the confirmed structure is daily profit accrual with withdrawals available from 25 USDT. EX-AI Pro also has an example return shown as up to 10% monthly, but actual results can differ, so the team should confirm the current figure for your exact account before you deposit.\n\n"
+            "Do you want me to move you to activation guidance for that range?"
+        )
+    return (
+        "Good question. Earnings depend on the product and plan range, so the first thing is knowing the amount you want to start with.\n\n"
+        "The confirmed structure is daily profit accrual, withdrawals from 25 USDT, and team confirmation of the current account figures before activation. What amount are you considering?"
+    )
+
+
+def withdrawal_reply(memory: dict[str, Any]) -> str:
+    amount = remembered_amount(memory)
+    amount_context = ""
+    if amount:
+        summary = plan_summary_for_amount(amount)
+        amount_context = f" Since you mentioned {amount:,.0f} USDT, that context matters for your plan fit: {summary}"
+    return (
+        f"Withdrawals are available, with a listed minimum withdrawal of 25 USDT. Processing may take up to 48 hours, and blockchain fees may apply.{amount_context}\n\n"
+        "Do you want me to connect this with the plan range you are considering?"
+    )
+
+
 def sales_reply_if_applicable(user_text: str, memory: dict[str, Any]) -> str | None:
     lowered = user_text.lower()
+    objection = objection_reply(user_text, memory)
+    if objection:
+        return objection
+
     if any(phrase in lowered for phrase in READY_INTENT_PHRASES):
         return (
             "Excellent. I'll connect you with the Aurum support team so they can guide you through the next steps.\n\n"
             "Before I pass this properly, please share your WhatsApp number and the amount range you are considering. That helps the team guide you with the right plan instead of guessing."
         )
 
+    amount = extract_investment_amount(user_text)
+    if amount:
+        return amount_plan_reply(amount, memory)
+
+    if "withdraw" in lowered:
+        return withdrawal_reply(memory)
+
+    if any(phrase in lowered for phrase in RETURN_INTENT_PHRASES):
+        return returns_reply(user_text, memory)
+
     if any(phrase in lowered for phrase in INVESTMENT_INTENT_PHRASES):
         return (
             "That's a practical question, and it usually means you're moving from curiosity into decision mode.\n\n"
             f"{INVESTMENT_PLAN_TEXT}\n\n"
-            "Can I ask what investment range you are considering? I can then guide you toward the most suitable next step."
-        )
-
-    if any(phrase in lowered for phrase in RETURN_INTENT_PHRASES):
-        return (
-            "That's an important question, especially because returns should never be treated casually.\n\n"
-            "Aurum discussions around earning are tied to the product and plan structure, but ROISCRAFT should not present profit as guaranteed. The right way to look at it is: understand the plan, the risk, the withdrawal process, and then let the team explain the current figures that apply.\n\n"
-            "Are you mainly trying to understand possible returns, or are you comparing whether the risk makes sense for you?"
+            "Which amount are you considering starting with?"
         )
 
     if memory.get("current_topic") in {"Minimum deposit", "Aurum plans"} and is_followup(user_text):
@@ -670,6 +773,7 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
         for key, value in compact_memory.items()
         if key not in INTERNAL_MEMORY_KEYS and value not in (None, "", [], {})
     )
+    sales_state = sales_state_for_prompt(memory)
 
     if not settings.openai_api_key:
         text = polish_public_reply(fallback_answer(topic, user_text), memory, topic)
@@ -682,7 +786,7 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
             temperature=0.55,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. Do not ask a question after every answer. If the previous assistant already asked a question, do not end this reply with another question unless the user explicitly asks for options. When you do ask, make it specific to the topic. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. Never say knowledge is missing or unavailable."},
+                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nSales state:\n{sales_state}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. Do not ask a question after every answer. If the previous assistant already asked a question, do not end this reply with another question unless the user explicitly asks for options. When you do ask, make it specific to the topic. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. Never say knowledge is missing or unavailable."},
             ],
             max_tokens=180,
         )
