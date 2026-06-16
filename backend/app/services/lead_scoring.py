@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 
 
 ESCALATION_TERMS = {
@@ -52,6 +53,10 @@ def qualify_message(text: str, current_score: int = 0) -> Qualification:
     if any(term in lowered for term in PLAN_TERMS):
         move_to(40)
         reasons.append("Plans or transaction question")
+    amount_match = re.search(r"(?:\$|usd\s*|usdt\s*)?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:usdt|usd|dollars?)?", lowered)
+    if amount_match and any(term in lowered for term in ["$", "usd", "usdt", "start", "deposit", "invest", "investment", "budget", "capital", "with"]):
+        move_to(75)
+        reasons.append("Specific investment amount shared")
     if any(term in lowered for term in MINIMUM_DEPOSIT_TERMS):
         move_to(60)
         reasons.append("Minimum deposit question")
