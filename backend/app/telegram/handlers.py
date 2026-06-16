@@ -9,6 +9,7 @@ from app.services.ai_orchestrator import generate_reply
 from app.services.admin_alerts import notify_admins
 from app.services.crm import apply_qualification, create_admin_task, get_or_create_user, load_memory, log_message, save_memory, update_user_profile
 from app.services.rate_limit import allow_event
+from app.services.sales_intelligence import analyze_sales_state, apply_sales_state
 from app.services.telegram import telegram
 
 
@@ -216,7 +217,11 @@ async def build_lead_summary(user: dict[str, Any], memory: dict[str, Any], score
         f"WhatsApp: {profile.get('phone_number') or user.get('phone_number') or 'Not collected'}\n"
         f"Country: {profile.get('country') or user.get('country') or 'Not collected'}\n"
         f"Preferred investment range: {memory.get('preferred_investment_range') or user.get('investment_intent') or 'Not collected'}\n"
-        f"Customer journey stage: {memory.get('customer_journey_stage') or memory.get('decision_stage') or 'Awareness'}\n"
+        f"Conversation stage: {memory.get('conversation_stage') or memory.get('customer_journey_stage') or memory.get('decision_stage') or 'Awareness'}\n"
+        f"Intent level: {memory.get('intent_level') or 'Not collected'}\n"
+        f"Matched plan: {memory.get('matched_plan') or 'Not collected'} {memory.get('matched_plan_range') or ''}\n"
+        f"Concerns/objections: {', '.join(memory.get('concerns') or []) or 'None detected'}\n"
+        f"Recommended next action: {memory.get('recommended_next_action') or 'Review and continue guided onboarding'}\n"
         f"Lead score: {score}\n"
         f"Lead temperature: {user.get('lead_temperature') or memory.get('lead_temperature') or 'COLD'}\n"
         f"Products discussed: {', '.join(memory.get('discussed_products') or []) or 'None yet'}\n"
@@ -378,6 +383,8 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
         else:
             memory[key] = value
     sync_profile_memory(memory, user)
+    sales_analysis = analyze_sales_state(text, memory, int(user.get("engagement_score") or 0))
+    apply_sales_state(memory, sales_analysis, text, int(user.get("engagement_score") or 0))
     if source in {"voice", "audio"}:
         memory["voice_interaction_enabled"] = True
         text_for_ai = f"The user sent a Telegram {source} note. Transcription: {text}"
@@ -389,6 +396,7 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
     remember_retrieval(memory, ai, message.get("date"))
     remember_sent_resource(memory, ai, message.get("date"))
     new_score = await apply_qualification(user["id"], int(user.get("engagement_score") or 0), ai["qualification"])
+    memory["lead_score"] = new_score
     if new_score >= 71:
         memory["customer_journey_stage"] = "High-intent investor"
     elif new_score >= 50:
