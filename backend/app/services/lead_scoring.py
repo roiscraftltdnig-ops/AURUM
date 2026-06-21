@@ -14,6 +14,24 @@ REGISTRATION_TERMS = {"register me", "registration", "i want to register", "conn
 MINIMUM_DEPOSIT_TERMS = {"minimum deposit", "minimum amount", "least amount", "how much do i need", "how much to start", "start with", "start small"}
 PLAN_TERMS = {"plan", "plans", "withdrawal", "withdrawals", "earn", "profit", "return", "returns", "deposit", "how much can i earn", "how do i deposit"}
 PRODUCT_TERMS = {"product", "products", "opportunity", "opportunities", "service", "services", "offering", "offerings"}
+PARTNER_TERMS = {
+    "partner", "partner program", "referral", "refer", "commission", "compensation",
+    "team building", "build a team", "network", "community", "matching bonus",
+    "leadership bonus", "partner rank", "partner level", "webinar",
+}
+NO_CAPITAL_TERMS = {
+    "don't have money", "dont have money", "do not have money", "no money", "no capital",
+    "cannot afford", "can't afford", "cant afford", "without investing", "without investment",
+}
+PARTNER_READY_TERMS = {
+    "i want to become a partner", "ready to become a partner", "ready to build a team",
+    "i have people interested", "people are interested", "partner registration",
+    "register as a partner", "join the partner program", "start my partner journey",
+}
+HYBRID_TERMS = {
+    "invest and refer", "invest and invite", "invest and build a team",
+    "investor and partner", "both investor and partner", "invest and become a partner",
+}
 ADVANCED_TERMS = {"tokenomics", "liquidity", "ecosystem", "governance", "institutional", "strategy"}
 BEGINNER_TERMS = {"what is", "explain", "beginner", "new to", "basics", "learn", "crypto", "tell me about"}
 GREETING_TERMS = {"hi", "hello", "hey", "good morning", "good afternoon", "good evening", "/start", "start"}
@@ -47,6 +65,18 @@ def qualify_message(text: str, current_score: int = 0) -> Qualification:
     if any(term in lowered for term in PRODUCT_TERMS):
         move_to(20)
         reasons.append("Product interest")
+    if any(term in lowered for term in PARTNER_TERMS):
+        move_to(45)
+        reasons.append("Partner-program interest")
+    if any(term in lowered for term in NO_CAPITAL_TERMS):
+        move_to(45)
+        reasons.append("No-capital partner-path signal")
+    if any(term in lowered for term in HYBRID_TERMS):
+        move_to(85)
+        reasons.append("Hybrid investor-and-partner intent")
+    if any(term in lowered for term in PARTNER_READY_TERMS):
+        move_to(100)
+        reasons.append("Ready-to-start partner signal")
     if any(term in lowered for term in ["ex-ai", "ex ai", "exai", "neobank", "neo bank", "zeus"]):
         move_to(30)
         reasons.append("Specific Aurum product interest")
@@ -80,7 +110,7 @@ def qualify_message(text: str, current_score: int = 0) -> Qualification:
         reasons.append("Contact follow-up requested")
 
     score = min(100, current_score + delta)
-    escalation = any(term in lowered for term in ESCALATION_TERMS | CONTACT_TERMS | READY_TERMS | REGISTRATION_TERMS)
+    escalation = any(term in lowered for term in ESCALATION_TERMS | CONTACT_TERMS | READY_TERMS | REGISTRATION_TERMS | PARTNER_READY_TERMS)
     return Qualification(stage_for_score(score), temperature_for_score(score), delta, escalation, reasons)
 
 
