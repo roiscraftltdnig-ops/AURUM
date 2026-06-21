@@ -58,6 +58,17 @@ ECOSYSTEM_TERMS = [
     "investment",
     "join",
     "started",
+    "partner",
+    "referral",
+    "refer",
+    "commission",
+    "compensation",
+    "team building",
+    "build a team",
+    "network",
+    "matching bonus",
+    "leadership",
+    "rank",
 ]
 
 FOLLOWUP_TERMS = {
@@ -152,6 +163,13 @@ INTENT_EXPANSIONS = {
     "withdrawals": "withdrawals plans participation risk transactions",
     "plans": "Aurum plans participation products risk withdrawals",
     "products": "EX-AI Bot EX-AI Pro NeoBank Zeus AI Bot Aurum ecosystem services",
+    "partner": "Aurum Partner Program referrals compensation team building ranks leadership matching bonuses qualification training webinars",
+    "referral": "Aurum Partner Program direct referral rewards qualified participants team rewards",
+    "commission": "Aurum Partner Program compensation direct referrals team rewards matching bonuses qualification",
+    "compensation": "Aurum Partner Program direct referral team rewards ranks leadership matching bonuses qualification",
+    "team": "Aurum Partner Program team building organization leadership rewards partner training",
+    "rank": "Aurum Partner Program rank advancement qualification leadership rewards",
+    "webinar": "Aurum Partner Program prospect invitation webinar follow-up partner training",
 }
 
 AURUM_BASE_CONTEXT = """
@@ -159,6 +177,13 @@ Aurum Foundation is presented as a ROISCRAFT-guided fintech opportunity focused 
 The minimum starting plan is 100 USDT. Plan ranges are Basic 100-249 USDT, Standard 250-999 USDT, Comfort 1,000-2,499 USDT, Optimal 2,500-4,999 USDT, Business 5,000-9,999 USDT, VIP 10,000-24,999 USDT, Luxury 25,000-49,999 USDT, and Ultimate 50,000-99,999 USDT.
 Profit accrues daily, withdrawals are available, the minimum withdrawal amount is 25 USDT, processing may take up to 48 hours, blockchain fees may apply, and activation occurs within 12-24 hours after deposit. EX-AI Pro has an example return shown as up to 10% monthly, but returns are not guaranteed and actual outcomes may differ.
 ROISCRAFT's role is education-first onboarding: users should understand the product, risk, participation process, and practical expectations before taking action. Conversations should be clear, balanced, and never promise guaranteed profits or risk-free returns.
+"""
+
+AURUM_PARTNER_CONTEXT = """
+The Aurum Partner Program is part of the same Aurum ecosystem, not a separate product or bot. It gives people a business-building path based on learning the ecosystem, introducing interested people, inviting prospects to educational presentations and webinars, and supporting a growing community.
+Partners may qualify for direct referral rewards, team-development rewards, rank and leadership opportunities, and matching bonuses. Exact rewards depend on personal activity, team activity, qualification status, business volume, rank, and the current compensation rules. The available source does not provide fixed commission percentages, so never invent payout figures.
+A user with no investment capital should be guided toward the Partner Program rather than dropped from the conversation. A user interested in both a product plan and referrals should be treated as a hybrid prospect.
+New partners should spend their first 30 days learning, starting conversations, following up, attending webinars with prospects, and developing leadership. Partners do not need a large audience or previous network-marketing experience; they can begin with a small circle and consistent educational conversations.
 """
 
 INVESTMENT_PLAN_TEXT = (
@@ -214,7 +239,7 @@ READY_INTENT_PHRASES = [
 SYSTEM_PROMPT = """You are the Aurum Foundation AI Community Guide inside Telegram.
 You are not a generic ecosystem chatbot, menu bot, PDF reader, or sales script.
 You behave like a professional Aurum sales advisor and customer relationship assistant: conversational, concise, helpful, calm, and consultative.
-You educate users about Aurum Foundation, EX-AI Bot, NeoBank, founder story, onboarding, videos when requested, membership, plans, withdrawals, and support.
+You educate users about Aurum Foundation, EX-AI Bot, EX-AI Pro, NeoBank, Zeus AI Bot, investor plans, withdrawals, the Partner Program, referrals, team building, leadership, training, and onboarding.
 Your objective is not just to answer. Your objective is to build understanding, trust, confidence, and engagement through natural conversation.
 Respect progressive disclosure: do not dump every detail at once. Normal answers must be 2-3 short paragraphs and 50-120 words. Detailed answers are allowed only when the user explicitly asks for detail.
 Use memory. If content was already shared, offer summary, deeper explanation, advanced material, or replay.
@@ -225,13 +250,14 @@ Risk direction: every trading, investment, digital asset, or portfolio opportuni
 Handoff direction: when a user shows serious intent, ask for name and phone number first. Email is useful but secondary.
 Never invent licenses, sales figures, partnerships, or regulatory approvals unless trusted internal Aurum knowledge explicitly supports them.
 Sales direction: guide users from curiosity to an informed decision without pressure. Recognize buying signals, answer clearly, handle objections with empathy, and move the conversation forward naturally.
-Sales memory direction: every reply must consider conversation_stage, intent_level, investment_interest, products_interested_in, concerns, and recommended_next_action when those exist.
+Sales memory direction: every reply must consider user_type, conversation_stage, intent_level, investment_interest, products_interested_in, partner_topics, concerns, and recommended_next_action when those exist.
+Unified-path direction: classify users naturally as investor, partner, or hybrid. Never present the Partner Program as a separate bot. If a user lacks capital, move them into the partner journey. If they want to invest and refer, guide both paths together.
 
 Conversation rules:
 - Acknowledge before answering with a short human phrase such as "Great question.", "That's a good place to start.", or "That makes sense." Vary it naturally.
 - Show you understand the user's intent before explaining. Example: if they ask about opportunities, recognize that they are probably trying to see what is worth exploring.
 - Answer the user's question clearly. Do not ask "what do you know?" before giving useful information.
-- Ask contextual questions only when helpful. Make them specific to the topic, not generic.
+- End conversion-related answers with one specific progression question. The question should qualify amount, network, goal, readiness, or desired next step rather than generically asking whether they want more information.
 - If the user gives a short message, infer the likely intent and move the conversation forward.
 - If the user sends or mentions voice, welcome voice notes and explain that short, clear voice notes work best.
 - Avoid numbered lists unless the user asks for a list or presentation.
@@ -242,6 +268,9 @@ Conversation rules:
 - If the user asks for minimum deposit, answer clearly that the minimum starting plan is 100 USDT, then briefly explain that they should understand the plan, risk, and withdrawal process before starting.
 - If the user shares an amount, match it to the correct plan range first and then guide them toward activation or team confirmation. Do not go backward into generic education.
 - If the user asks about earnings, answer using known plan/withdrawal structure and only mention the EX-AI Pro up-to-10% monthly example when relevant. Do not invent a fixed return for every plan.
+- If a partner asks about earnings, explain direct referral, team-development, rank/leadership, and matching-bonus opportunities. State that qualification and team activity determine rewards; never invent percentages absent from trusted Aurum information.
+- If the user says they have no money or cannot afford a plan, do not end the sale or keep pushing a deposit. Explain the Partner Program and ask about their network, audience, or willingness to invite people to educational sessions.
+- If the user wants both investing and referrals, explicitly recognize a hybrid path and progress both the plan match and partner qualification.
 - Do not repeat risk warnings unless the user asks about risk, safety, guarantees, earnings, or payment. When risk is relevant, keep it short and practical.
 - If the user is afraid, skeptical, or worried, acknowledge the concern first and explain calmly. Never argue.
 - If the user says they are ready to join/register/proceed, affirm positively and let them know an Aurum representative will guide them.
@@ -261,7 +290,7 @@ Conversation rules:
 
 def detect_portfolio(text: str, memory: dict[str, Any]) -> str | None:
     lowered = text.lower()
-    if any(term in lowered for term in ["aurum", "foundation", "ex-ai", "ex ai", "exai", "neobank", "neo bank", "zeus"]):
+    if any(term in lowered for term in ["aurum", "foundation", "ex-ai", "ex ai", "exai", "neobank", "neo bank", "zeus", "partner", "referral", "commission", "compensation", "team building"]):
         return "Aurum Foundation"
     current_topic = active_memory_topic(memory)
     if is_followup(text) and current_topic:
@@ -301,7 +330,7 @@ def conversational_learning_query(text: str) -> str:
         return text
     return (
         "Give a concise conversational walkthrough of Aurum Foundation: company overview, "
-        "main products, EX-AI Bot, NeoBank, plans, risks, onboarding, and next learning step."
+        "main products, EX-AI Bot, NeoBank, investor plans, Partner Program, referrals, team building, onboarding, and next learning step."
     )
 
 
@@ -323,6 +352,14 @@ def detect_topic(text: str, memory: dict[str, Any]) -> str:
         return "NeoBank"
     if "zeus" in lowered:
         return "Zeus AI Bot"
+    if any(term in lowered for term in ["matching bonus", "leadership bonus", "partner rank", "partner level", "qualification"]):
+        return "Partner leadership and qualification"
+    if any(term in lowered for term in ["commission", "compensation", "referral reward", "team reward", "how do partners earn"]):
+        return "Partner compensation"
+    if any(term in lowered for term in ["webinar", "prospect", "invitation script", "follow up", "first 30 days"]):
+        return "Partner training"
+    if any(term in lowered for term in ["partner", "referral", "refer", "build a team", "network", "community"]):
+        return "Aurum Partner Program"
     if "minimum" in lowered or "how much" in lowered or "start with" in lowered:
         return "Minimum deposit"
     if "opportunit" in lowered or "product" in lowered or "service" in lowered or "offering" in lowered:
@@ -450,7 +487,11 @@ def polish_public_reply(text: str, memory: dict[str, Any], topic: str | None = N
     cleaned = sanitize_public_reply(text)
     cleaned = remove_back_to_back_question(cleaned, memory)
     cleaned = limit_reply_length(cleaned)
-    if memory.get("conversation_stage") in {"INVESTMENT_CONSIDERATION", "HIGH_INTENT", "REGISTRATION_HANDOFF"}:
+    if memory.get("conversation_stage") in {
+        "INVESTMENT_CONSIDERATION", "INVESTOR_PROSPECT", "PARTNER_PROSPECT",
+        "HYBRID_PROSPECT", "HIGH_INTENT", "READY_FOR_REGISTRATION",
+        "REGISTRATION_HANDOFF", "HUMAN_HANDOFF",
+    }:
         return cleaned
     bridge = conversation_bridge(topic, cleaned)
     if bridge:
@@ -490,6 +531,26 @@ def configured_resource_reply(resource_key: str, resource_url: str, resource_typ
 def fallback_answer(topic: str, user_text: str) -> str:
     lowered = user_text.lower()
     followup = is_followup(user_text)
+    if topic in {"Aurum Partner Program", "Partner compensation", "Partner leadership and qualification", "Partner training"}:
+        if topic == "Partner compensation":
+            return (
+                "Partners can qualify for direct referral rewards, team-development rewards, rank and leadership opportunities, and matching bonuses. Eligibility depends on activity, team performance, business volume, and qualification rather than one fixed commission for everyone.\n\n"
+                "Are you more interested in direct referrals or building a larger team?"
+            )
+        if topic == "Partner leadership and qualification":
+            return (
+                "Partner progression is based on meeting activity, team-development, volume, and rank conditions. Leadership and matching rewards are designed for partners who help their organizations grow and support other members consistently.\n\n"
+                "Are you starting as a beginner, or do you already have a team or community?"
+            )
+        if topic == "Partner training":
+            return (
+                "New partners begin with education, a contact list, simple conversations, webinar invitations, and professional follow-up. The first 30 days should build consistency before focusing on leadership.\n\n"
+                "Would a first-conversation script or a daily activity plan help you most?"
+            )
+        return (
+            "The Aurum Partner Program lets people build the business side of the ecosystem through education, qualified referrals, webinar invitations, and team development. It can be a starting path for someone without investment capital, or it can be combined with an investor plan.\n\n"
+            "Do you want to focus on direct referrals, team building, or both investing and partnership?"
+        )
     if topic == "EX-AI Bot":
         if followup:
             return (
@@ -498,7 +559,7 @@ def fallback_answer(topic: str, user_text: str) -> str:
             )
         return (
             "Great question. EX-AI Bot is Aurum's AI-powered trading solution for analyzing market opportunities and supporting automated trading activity.\n\n"
-            "Most people first try to understand whether the bot simply gives signals or actually supports automation. The important part is learning how it works, the risks involved, and what participation requires before taking action."
+            "Most people first try to understand whether the bot simply gives signals or actually supports automation. The important part is learning how it works, the risks involved, and what participation requires before taking action. What amount were you considering starting with?"
         )
     if topic == "NeoBank":
         if followup:
@@ -551,6 +612,130 @@ def remembered_amount(memory: dict[str, Any]) -> float | None:
 def user_name(memory: dict[str, Any]) -> str | None:
     profile = memory.get("profile") or {}
     return profile.get("first_name") or memory.get("first_name")
+
+
+def partner_reply_if_applicable(user_text: str, memory: dict[str, Any]) -> str | None:
+    lowered = user_text.lower()
+    user_type = str(memory.get("user_type") or "undetermined")
+    no_capital = any(term in lowered for term in [
+        "don't have money", "dont have money", "do not have money", "no money", "no capital",
+        "cannot afford", "can't afford", "cant afford", "without investing", "without investment",
+    ])
+    partner_terms = [
+        "partner", "referral", "refer", "commission", "compensation", "team", "network",
+        "community", "matching bonus", "leadership", "rank", "webinar", "prospect",
+    ]
+    is_partner_context = user_type in {"partner", "hybrid"} or any(term in lowered for term in partner_terms)
+    explicit_hybrid = user_type == "hybrid" and (
+        extract_investment_amount(user_text) is not None
+        or any(term in lowered for term in ["invest and", "both", "also refer", "invite friends", "investor and partner"])
+    )
+
+    if explicit_hybrid:
+        amount = extract_investment_amount(user_text) or remembered_amount(memory)
+        plan_text = plan_summary_for_amount(amount) if amount else None
+        amount_text = f" On the investor side, {plan_text}" if plan_text else " On the investor side, we can first match your preferred amount to the right plan."
+        return (
+            "That combination can be a strong way to participate in Aurum. You can use the product path that suits your budget while also building a partner network through education, referrals, and webinar invitations."
+            f"{amount_text}\n\n"
+            "For the partner side, do you already have friends, an audience, or a community you could introduce?"
+        )
+
+    if no_capital:
+        return (
+            "I understand. Not everyone begins through a deposit, and that does not end your Aurum journey.\n\n"
+            "You can begin through the Partner Program by learning the ecosystem, introducing interested people, inviting them to educational webinars, and building a community. Rewards can come through qualified referrals, team development, and leadership progression.\n\n"
+            "Do you currently have friends, an audience, or a community you could introduce?"
+        )
+
+    if not is_partner_context:
+        return None
+
+    if any(term in lowered for term in ["i want to become a partner", "register as a partner", "join the partner program", "ready to build a team", "i have people interested", "start my partner journey"]):
+        return (
+            "That's a strong next step. A representative can guide your partner registration, explain the current qualification process, and help you begin building your first contact list.\n\n"
+            "Please share your name, WhatsApp number, and country so the team can follow up properly."
+        )
+
+    if "matching bonus" in lowered or "matching system" in lowered:
+        return (
+            "A matching bonus is designed to reward qualified partners who help their team members perform and advance. It encourages mentorship, because your eligibility depends on the team's achievements and the current compensation conditions.\n\n"
+            "Are you more interested in personally referring people or developing leaders inside a larger team?"
+        )
+
+    if any(term in lowered for term in ["rank", "partner level", "leadership bonus", "leader earn", "advance"]):
+        return (
+            "Partner advancement reflects business growth, team development, leadership, and meeting the required targets. Higher qualification levels can unlock additional leadership opportunities and rewards, but the exact requirements depend on activity, volume, and rank rules.\n\n"
+            "Are you aiming to build a small referral business or grow toward leadership?"
+        )
+
+    if any(term in lowered for term in ["qualify", "qualification", "requirement", "before i get paid", "business volume"]):
+        return (
+            "Partner rewards require qualification rather than invitations alone. The relevant factors can include personal activity, team activity, business volume, and rank status under the current compensation structure.\n\n"
+            "Would you be starting with direct referrals, or do you already have a team to develop?"
+        )
+
+    if any(term in lowered for term in ["direct referral", "refer someone", "referral commission", "paid for inviting"]):
+        return (
+            "Direct referral rewards are usually the first earning layer. When someone you personally introduce completes the required qualification, you may become eligible for the corresponding referral reward.\n\n"
+            "How many people do you realistically feel you could invite to an educational webinar first?"
+        )
+
+    if any(term in lowered for term in ["team commission", "earn from my team", "people my team", "team reward", "build a team"]):
+        return (
+            "Yes, the Partner Program includes team-development rewards for qualified partners. The real work is helping new members understand Aurum, attend presentations, follow up professionally, and grow consistently; additional reward opportunities can open as the organization meets its conditions.\n\n"
+            "Do you already have potential team members, or would you be starting from your personal contacts?"
+        )
+
+    if any(term in lowered for term in ["how do partners make money", "how do partners earn", "how do i get paid", "commission", "compensation", "earning opportunity", "earn without"]):
+        return (
+            "Partners can earn through several parts of the Aurum structure: qualified direct referrals, team-development rewards, rank and leadership progression, and matching bonuses. The exact reward depends on activity, team performance, and qualification; there is no single fixed payout that applies to everyone.\n\n"
+            "Would you prefer to begin with direct referrals or understand how a larger team creates growth?"
+        )
+
+    if any(term in lowered for term in ["first 30 days", "beginner roadmap", "daily routine", "just joined", "first step"]):
+        return (
+            "A new partner's first month is a learning-and-activity phase. Week 1 is for understanding Aurum; week 2 for creating a contact list and starting conversations; week 3 for follow-up and webinars; week 4 for consistency and helping newer partners.\n\n"
+            "Would a simple first-conversation script or a daily activity plan help you most?"
+        )
+
+    if any(term in lowered for term in ["don't know anyone", "dont know anyone", "do not know anyone", "no followers", "no audience", "small network"]):
+        return (
+            "You do not need a large following to begin. Many partners start with friends, family, professional contacts, online communities, and referrals from people they already know, then grow through genuine conversations.\n\n"
+            "Which starting point fits you best: personal contacts, professional contacts, or social media?"
+        )
+
+    if any(term in lowered for term in ["social media", "facebook", "tiktok", "instagram", "promote online", "post online"]):
+        return (
+            "Social media can support partner growth when the content is educational rather than hype-driven. Useful posts include AI and technology insights, webinar announcements, your learning journey, and curiosity-based invitations that lead people to a proper presentation.\n\n"
+            "Which platform would you be using first: WhatsApp, Facebook, TikTok, or Instagram?"
+        )
+
+    if any(term in lowered for term in ["never done", "no experience", "not good at selling", "afraid of talking"]):
+        return (
+            "Previous network-marketing or sales experience is not required. Your role is to learn, start natural conversations, invite interested people to educational sessions, and connect them with experienced leaders when deeper questions arise.\n\n"
+            "Would you like a short message you can use for your first invitation?"
+        )
+
+    if "webinar" in lowered and any(term in lowered for term in ["invite", "message", "script", "what do i say"]):
+        return (
+            "Keep the invitation short and curiosity-led: 'Hello [Name], I found a technology and financial ecosystem that may interest you. There is a short educational webinar where the products and opportunities are explained clearly. Would you like the details?'\n\n"
+            "Will you be sending this through WhatsApp, social media, or a personal conversation?"
+        )
+
+    if any(term in lowered for term in ["follow up", "did not respond", "didn't respond", "after the webinar"]):
+        return (
+            "Follow up by asking for their opinion, not by pressuring them: 'Hi [Name], did you get a chance to review the information? I would like to hear what stood out to you and answer any questions.'\n\n"
+            "Did the person attend the webinar, or are you following up on an invitation they have not opened yet?"
+        )
+
+    if any(term in lowered for term in ["what is the partner program", "explain the partner program", "how do i become a partner", "partner journey", "partner program"]):
+        return (
+            "The Aurum Partner Program is the business-building side of the same ecosystem. Partners learn the products, introduce interested people, invite prospects to educational sessions, and support a growing network; qualified activity can unlock referral, team, and leadership rewards.\n\n"
+            "Are you mainly interested in personal referrals, building a team, or combining partnership with an investment plan?"
+        )
+
+    return None
 
 
 def objection_reply(user_text: str, memory: dict[str, Any]) -> str | None:
@@ -623,11 +808,25 @@ def withdrawal_reply(memory: dict[str, Any]) -> str:
 
 def sales_reply_if_applicable(user_text: str, memory: dict[str, Any]) -> str | None:
     lowered = user_text.lower()
+    partner_text = partner_reply_if_applicable(user_text, memory)
+    if partner_text:
+        return partner_text
     objection = objection_reply(user_text, memory)
     if objection:
         return objection
 
     if any(phrase in lowered for phrase in READY_INTENT_PHRASES):
+        user_type = memory.get("user_type")
+        if user_type == "hybrid":
+            return (
+                "Excellent. I'll connect you with the Aurum team for combined investor and partner onboarding.\n\n"
+                "Please share your WhatsApp number, the amount range you are considering, and whether you already have people you could introduce."
+            )
+        if user_type == "partner":
+            return (
+                "Excellent. I'll connect you with the Aurum team for partner onboarding.\n\n"
+                "Please share your WhatsApp number, country, and whether you already have people or a community you could introduce."
+            )
         return (
             "Excellent. I'll connect you with the Aurum support team so they can guide you through the next steps.\n\n"
             "Before I pass this properly, please share your WhatsApp number and the amount range you are considering. That helps the team guide you with the right plan instead of guessing."
@@ -665,10 +864,17 @@ def response_directive(portfolio: str | None, user_text: str) -> str:
     wants_detail = any(phrase in lowered for phrase in ["in detail", "detailed", "deep", "presentation", "full explanation"])
     wants_opportunities = any(phrase in lowered for phrase in ["opportunity", "opportunities", "product", "products", "service", "services", "offering", "offerings"])
     wants_minimum = any(phrase in lowered for phrase in ["minimum", "minimum deposit", "minimum amount", "how much", "start with"])
+    wants_partner = any(phrase in lowered for phrase in ["partner", "referral", "commission", "compensation", "team building", "matching bonus", "partner rank", "webinar"])
     if is_file_or_presentation_request(user_text):
         return (
             "The user is asking around a presentation or file. Do not offer or mention files. "
             "Instead, say you can walk them through the key ideas here, then give a concise conversational overview and ask which part they want next."
+        )
+    if portfolio == "Aurum Foundation" and wants_partner:
+        return (
+            "The user is asking about the Aurum Partner Program. Treat it as part of the same Aurum ecosystem. "
+            "Answer directly from partner context, distinguish direct referrals, team development, ranks, leadership, matching bonuses, and qualification when relevant, and do not invent percentages. "
+            "End with one specific question that progresses the user toward referral activity, team building, hybrid participation, registration, or human onboarding."
         )
     if portfolio == "Aurum Foundation" and wants_opportunities:
         return (
@@ -764,7 +970,9 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
     confidence = confidence_band(score)
     context = format_context(context_chunks)
     if not context:
-        context = AURUM_BASE_CONTEXT
+        context = f"{AURUM_BASE_CONTEXT}\n{AURUM_PARTNER_CONTEXT}"
+    elif memory.get("user_type") in {"partner", "hybrid"}:
+        context = f"{AURUM_PARTNER_CONTEXT}\n{context}"
     compact_memory = dict(memory)
     if isinstance(compact_memory.get("previous_questions"), list):
         compact_memory["previous_questions"] = compact_memory["previous_questions"][-8:]
@@ -786,7 +994,7 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
             temperature=0.55,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nSales state:\n{sales_state}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. Do not ask a question after every answer. If the previous assistant already asked a question, do not end this reply with another question unless the user explicitly asks for options. When you do ask, make it specific to the topic. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. Never say knowledge is missing or unavailable."},
+                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nSales state:\n{sales_state}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. For investor, partner, or hybrid conversion topics, end with one specific progression question about amount, network, goals, readiness, or the next onboarding step. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. Never say knowledge is missing or unavailable."},
             ],
             max_tokens=180,
         )
