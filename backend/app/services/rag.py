@@ -130,6 +130,8 @@ async def retrieve_context(query: str, portfolio: str | None = None, limit: int 
         priority_value = int(metadata.get("priority") or 0)
         if resource_key == "aurum_conversation_kb_v31":
             priority_value += 100
+        if resource_key == "aurum_partner_program":
+            priority_value += 100
         return (priority_value, float(chunk.get("similarity") or 0))
 
     result = sorted(chunks, key=priority, reverse=True)[:limit]
