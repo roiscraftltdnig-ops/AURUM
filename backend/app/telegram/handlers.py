@@ -191,9 +191,17 @@ def handoff_confirmation(user: dict[str, Any], memory: dict[str, Any]) -> str:
     phone = (memory.get("profile") or {}).get("phone_number") or user.get("phone_number")
     if not phone:
         memory["pending_profile_field"] = "phone_number"
+        user_type = memory.get("user_type") or "investor"
+        detail_request = (
+            "Please share your WhatsApp number and tell me whether you already have people or a community you could introduce."
+            if user_type == "partner"
+            else "Please share your WhatsApp number and, if you already know it, the investment range you are considering."
+        )
+        if user_type == "hybrid":
+            detail_request = "Please share your WhatsApp number, the investment range you are considering, and whether you already have people you could introduce."
         return (
             f"{prefix} I'll connect you with the Aurum support team so they can guide you through the next steps.\n\n"
-            "Please share your WhatsApp number and, if you already know it, the investment range you are considering. That helps the team guide you properly."
+            f"{detail_request} That helps the team guide you properly."
         )
     return (
         f"{prefix} I'll connect you with the Aurum support team so they can guide you through the next steps.\n\n"
@@ -211,20 +219,23 @@ async def build_lead_summary(user: dict[str, Any], memory: dict[str, Any], score
         if content:
             conversation_lines.append(f"{role}: {content[:500]}")
 
+    temperature = "HOT" if score >= 71 else "WARM" if score >= 31 else "COLD"
     return (
         f"Name: {profile.get('first_name') or user.get('first_name') or 'Not collected'}\n"
         f"Telegram: @{user.get('telegram_username') or user.get('telegram_id')}\n"
         f"WhatsApp: {profile.get('phone_number') or user.get('phone_number') or 'Not collected'}\n"
         f"Country: {profile.get('country') or user.get('country') or 'Not collected'}\n"
         f"Preferred investment range: {memory.get('preferred_investment_range') or user.get('investment_intent') or 'Not collected'}\n"
+        f"Interest type: {memory.get('user_type') or 'Undetermined'}\n"
         f"Conversation stage: {memory.get('conversation_stage') or memory.get('customer_journey_stage') or memory.get('decision_stage') or 'Awareness'}\n"
         f"Intent level: {memory.get('intent_level') or 'Not collected'}\n"
         f"Matched plan: {memory.get('matched_plan') or 'Not collected'} {memory.get('matched_plan_range') or ''}\n"
         f"Concerns/objections: {', '.join(memory.get('concerns') or []) or 'None detected'}\n"
         f"Recommended next action: {memory.get('recommended_next_action') or 'Review and continue guided onboarding'}\n"
         f"Lead score: {score}\n"
-        f"Lead temperature: {user.get('lead_temperature') or memory.get('lead_temperature') or 'COLD'}\n"
+        f"Lead temperature: {temperature}\n"
         f"Products discussed: {', '.join(memory.get('discussed_products') or []) or 'None yet'}\n"
+        f"Partner topics: {', '.join(memory.get('partner_topics') or []) or 'None yet'}\n"
         f"Experience level: {memory.get('experience_level') or 'Not collected'}\n"
         f"Latest user message: {latest_text}\n\n"
         f"Recent conversation history:\n" + "\n".join(conversation_lines)
@@ -396,7 +407,8 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
     remember_retrieval(memory, ai, message.get("date"))
     remember_sent_resource(memory, ai, message.get("date"))
     new_score = await apply_qualification(user["id"], int(user.get("engagement_score") or 0), ai["qualification"])
-    memory["lead_score"] = new_score
+    post_score_analysis = analyze_sales_state(text, memory, new_score)
+    apply_sales_state(memory, post_score_analysis, text, new_score)
     if new_score >= 71:
         memory["customer_journey_stage"] = "High-intent investor"
     elif new_score >= 50:
