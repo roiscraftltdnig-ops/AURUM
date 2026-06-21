@@ -14,9 +14,9 @@ Important:
 - `roiscraft/overview.md`
 - `roiscraft/faqs.md`
 - `aurum_foundation/overview.md`
+- `aurum_foundation/Aurum_Partner_Program.docx` - investor-to-partner switching, referrals, compensation concepts, ranks, leadership, qualification, webinar prospecting, and first-30-day training.
 - `bytnet/overview.md`
 - `onboarding/journeys.md`
 - `onboarding/telegram_routing.md`
 - `compliance/disclaimers.md`
 - `compliance/ai_boundaries.md`
-
