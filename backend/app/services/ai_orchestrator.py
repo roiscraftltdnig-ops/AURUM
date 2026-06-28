@@ -244,7 +244,7 @@ Your objective is not just to answer. Your objective is to build understanding, 
 Respect progressive disclosure: do not dump every detail at once. Normal answers must be 2-3 short paragraphs and 50-120 words. Detailed answers are allowed only when the user explicitly asks for detail.
 Use memory. If content was already shared, offer summary, deeper explanation, advanced material, or replay.
 Do not ask a question after every answer. Let the conversation breathe: sometimes answer and pause; sometimes ask one contextual question.
-Use the internal Aurum knowledge silently as your source of truth. Do not answer Aurum questions from generic model knowledge when internal Aurum knowledge exists. If a detail is not clear, answer the closest useful part, stay careful, and ask one clarifying follow-up.
+Use the internal Aurum knowledge silently as your source of truth. Do not answer Aurum questions from generic model knowledge when internal Aurum knowledge exists. If a precise Aurum detail is not officially confirmed in the supplied context, say that the official confirmation is not available to you yet and offer a team follow-up. Never fabricate details.
 Founder direction: routing should be based on the user's interest and questions, not forced. Start with education and training before participation.
 Risk direction: every trading, investment, digital asset, or portfolio opportunity carries risk. Never guarantee returns, profit, income, or capital protection.
 Handoff direction: when a user shows serious intent, ask for name and phone number first. Email is useful but secondary.
@@ -278,7 +278,7 @@ Conversation rules:
 - Do not repeat the same ROISCRAFT overview if the user already asked it recently. Build on the last question.
 - Never mention internal sources, PDFs, files, knowledge bases, vector search, retrieval, or documents to the user. Forbidden phrases include: "according to the knowledge base", "according to the uploaded PDF", "according to the presentation", "based on the documentation", "the PDF states", and "the document explains".
 - Never show lead scores, confidence scores, admin alerts, escalation logs, missing-resource messages, CRM events, workflow logs, or backend reasoning to the user.
-- Never say knowledge is missing or unavailable. If a precise detail is unclear, answer the closest useful part conversationally and ask a clarifying question.
+- If a precise detail is not officially confirmed, do not guess. Say naturally: "I don't have an official Aurum confirmation for that detail yet," then offer to connect the user with an Aurum representative. Do not mention documents, PDFs, retrieval, or internal sources.
 - If memory shows the same topic was already explained, do not repeat the same answer. Acknowledge it briefly and offer a summary, deeper explanation, presentation review, or team follow-up.
 - If the user says Aurum, Aurum Foundation, or asks about the Foundation pathway in this ROISCRAFT context, treat it as Aurum Foundation.
 - For Aurum questions, explain that it is a ROISCRAFT opportunity that requires education-first onboarding, due diligence review, risk awareness, and approved materials before participation.
@@ -494,9 +494,19 @@ def polish_public_reply(text: str, memory: dict[str, Any], topic: str | None = N
     }:
         return cleaned
     bridge = conversation_bridge(topic, cleaned)
-    if bridge:
+    if bridge and bridge not in cleaned:
         cleaned = f"{cleaned}\n\n{bridge}"
     return cleaned
+
+
+def quality_check_reply(text: str, memory: dict[str, Any], topic: str | None = None) -> str:
+    checked = polish_public_reply(text, memory, topic)
+    if not checked:
+        return (
+            "I can help with that, but I want to keep the answer accurate.\n\n"
+            "Which part should we focus on first: Aurum products, the investment plan, or the Partner Program?"
+        )
+    return checked
 
 
 def video_key_for_request(text: str, portfolio: str | None) -> str | None:
@@ -526,6 +536,34 @@ def missing_video_reply(video_key: str) -> str:
 def configured_resource_reply(resource_key: str, resource_url: str, resource_type: str) -> str:
     label = resource_key.replace("_", " ").replace("aurum", "Aurum").replace("ex ai", "EX-AI").replace("neobank", "NeoBank")
     return f"Here is the video link you asked for.\n\n{label.title()}:\n{resource_url}\n\nWhat would you like me to explain after you watch it?"
+
+
+def official_gap_reply(user_text: str) -> str | None:
+    lowered = user_text.lower()
+    sensitive_topics = {
+        "fixed partner percentage": ["exact commission", "commission percentage", "what percentage", "percent commission", "fixed commission"],
+        "license or regulation": ["license", "licensed", "regulated", "regulation", "sec approved", "government approved"],
+        "founder or ownership": ["founder", "owner", "who owns", "ceo"],
+        "guaranteed profit": ["guaranteed profit", "guarantee return", "sure profit", "capital protection"],
+        "unlisted bonus": ["exact bonus", "bonus percentage", "rank percentage", "matching percentage"],
+    }
+    for topic, phrases in sensitive_topics.items():
+        if any(phrase in lowered for phrase in phrases):
+            if topic == "fixed partner percentage":
+                return (
+                    "I don't have an official Aurum confirmation for a fixed partner percentage that applies to everyone.\n\n"
+                    "What is clear is that partner earnings depend on qualification, direct referrals, team activity, rank progression, and matching-bonus conditions. If you want exact current figures, I can help route you to an Aurum representative for confirmation."
+                )
+            if topic == "guaranteed profit":
+                return (
+                    "I can't present Aurum as guaranteed profit or capital protection.\n\n"
+                    "The safer way to understand it is that Aurum involves trading and digital-asset activity, so risk still exists. A representative should confirm the current account terms before you make any payment."
+                )
+            return (
+                "I don't have an official Aurum confirmation for that detail yet.\n\n"
+                "I can still explain the parts that are clear, or I can help connect you with an Aurum representative so they confirm it directly."
+            )
+    return None
 
 
 def fallback_answer(topic: str, user_text: str) -> str:
@@ -619,7 +657,8 @@ def partner_reply_if_applicable(user_text: str, memory: dict[str, Any]) -> str |
     user_type = str(memory.get("user_type") or "undetermined")
     no_capital = any(term in lowered for term in [
         "don't have money", "dont have money", "do not have money", "no money", "no capital",
-        "cannot afford", "can't afford", "cant afford", "without investing", "without investment",
+        "don't have capital", "dont have capital", "do not have capital", "cannot afford",
+        "can't afford", "cant afford", "without investing", "without investment",
     ])
     partner_terms = [
         "partner", "referral", "refer", "commission", "compensation", "team", "network",
@@ -808,6 +847,9 @@ def withdrawal_reply(memory: dict[str, Any]) -> str:
 
 def sales_reply_if_applicable(user_text: str, memory: dict[str, Any]) -> str | None:
     lowered = user_text.lower()
+    official_gap = official_gap_reply(user_text)
+    if official_gap:
+        return official_gap
     partner_text = partner_reply_if_applicable(user_text, memory)
     if partner_text:
         return partner_text
@@ -994,7 +1036,7 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
             temperature=0.55,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nSales state:\n{sales_state}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. For investor, partner, or hybrid conversion topics, end with one specific progression question about amount, network, goals, readiness, or the next onboarding step. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. Never say knowledge is missing or unavailable."},
+                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nSales state:\n{sales_state}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. For investor, partner, or hybrid conversion topics, end with one specific progression question about amount, network, goals, readiness, or the next onboarding step. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. If an exact Aurum detail is not officially confirmed in the context, say you do not have official Aurum confirmation for that detail yet and offer representative follow-up."},
             ],
             max_tokens=180,
         )

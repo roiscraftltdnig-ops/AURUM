@@ -77,9 +77,11 @@ async def generate_daily_report() -> dict[str, Any]:
     today = datetime.now(timezone.utc).date().isoformat()
     metrics = await supabase.rpc("dashboard_metrics", {})
     users = await supabase.select("users", "order=last_seen_at.desc", limit=5000)
+    memories = await supabase.select("user_memory", "order=updated_at.desc", limit=5000)
     tasks = await supabase.select("admin_tasks", "status=eq.open&order=created_at.desc", limit=50)
     messages = await supabase.select("messages", "order=created_at.desc", limit=1000)
     user_messages = [message for message in messages if message.get("role") == "user"]
+    memory_by_user = {row.get("user_id"): row.get("memory") or {} for row in memories}
 
     product_interest: Counter[str] = Counter()
     objections: Counter[str] = Counter()
@@ -122,12 +124,36 @@ async def generate_daily_report() -> dict[str, Any]:
     warm_count = sum(1 for user in users if user.get("lead_temperature") == "WARM")
     hot_count = sum(1 for user in users if user.get("lead_temperature") == "HOT")
     hot_users = [user for user in users if user.get("lead_temperature") == "HOT" or int(user.get("engagement_score") or 0) >= 80]
+    user_type_counts: Counter[str] = Counter(
+        str(memory_by_user.get(user.get("id"), {}).get("user_type") or "undetermined")
+        for user in users
+    )
+    stage_counts: Counter[str] = Counter(
+        str(memory_by_user.get(user.get("id"), {}).get("display_conversation_stage") or user.get("qualification_stage") or "Unknown")
+        for user in users
+    )
+    high_partner_count = sum(
+        1 for user in users
+        if memory_by_user.get(user.get("id"), {}).get("user_type") == "partner"
+        and (user.get("lead_temperature") == "HOT" or int(user.get("engagement_score") or 0) >= 50)
+    )
+    high_investor_count = sum(
+        1 for user in users
+        if memory_by_user.get(user.get("id"), {}).get("user_type") == "investor"
+        and (user.get("lead_temperature") == "HOT" or int(user.get("engagement_score") or 0) >= 50)
+    )
+    high_hybrid_count = sum(
+        1 for user in users
+        if memory_by_user.get(user.get("id"), {}).get("user_type") == "hybrid"
+        and (user.get("lead_temperature") == "HOT" or int(user.get("engagement_score") or 0) >= 50)
+    )
 
     interests = _top_lines(product_interest, "No clear product interest yet.")
     objection_lines = _top_lines(objections, "No common objections yet.")
+    stage_lines = _top_lines(stage_counts, "No conversation stages recorded yet.")
     top_questions = ", ".join(word for word, _count in terms.most_common(8)) or "No dominant question themes yet."
     hot_lines = "\n".join(
-        f"- @{user.get('telegram_username') or user.get('telegram_id')}: score {user.get('engagement_score', 0)}, stage {user.get('qualification_stage')}"
+        f"- @{user.get('telegram_username') or user.get('telegram_id')}: score {user.get('engagement_score', 0)}, type {memory_by_user.get(user.get('id'), {}).get('user_type') or 'undetermined'}, stage {memory_by_user.get(user.get('id'), {}).get('display_conversation_stage') or user.get('qualification_stage')}"
         for user in hot_users[:12]
     ) or "- No high-intent leads today."
     task_lines = "\n".join(f"- {task['title']}: {task['recommended_action']}" for task in tasks[:12]) or "- No open admin tasks."
@@ -141,7 +167,11 @@ async def generate_daily_report() -> dict[str, Any]:
         f"Cold leads: {cold_count}\n"
         f"Warm leads: {warm_count}\n"
         f"Hot leads: {hot_count}\n\n"
+        f"Investor leads: {user_type_counts.get('investor', 0)} total / {high_investor_count} warm-hot\n"
+        f"Partner leads: {user_type_counts.get('partner', 0)} total / {high_partner_count} warm-hot\n"
+        f"Hybrid leads: {user_type_counts.get('hybrid', 0)} total / {high_hybrid_count} warm-hot\n\n"
         f"*Top interests*\n{interests}\n\n"
+        f"*Conversation stages*\n{stage_lines}\n\n"
         f"*Common objections*\n{objection_lines}\n\n"
         f"*Action queue*\n{task_lines}\n\n"
         f"*High-intent leads*\n{hot_lines}\n\n"
@@ -153,9 +183,14 @@ async def generate_daily_report() -> dict[str, Any]:
         f"Total users: {len(users)}",
         f"User messages reviewed: {len(user_messages)}",
         f"Cold/Warm/Hot: {cold_count}/{warm_count}/{hot_count}",
+        f"Investor/Partner/Hybrid leads: {user_type_counts.get('investor', 0)}/{user_type_counts.get('partner', 0)}/{user_type_counts.get('hybrid', 0)}",
+        f"Warm-hot investor/partner/hybrid: {high_investor_count}/{high_partner_count}/{high_hybrid_count}",
         "",
         "Top interests:",
         interests,
+        "",
+        "Conversation stages:",
+        stage_lines,
         "",
         "Common objections:",
         objection_lines,
@@ -166,6 +201,7 @@ async def generate_daily_report() -> dict[str, Any]:
         "Conversation detail:",
     ]
     for user in users[:200]:
+        user_memory = memory_by_user.get(user.get("id"), {})
         identity = f"@{user.get('telegram_username')}" if user.get("telegram_username") else user.get("telegram_id")
         pdf_lines.extend([
             "",
@@ -174,7 +210,10 @@ async def generate_daily_report() -> dict[str, Any]:
             f"Phone/WhatsApp: {user.get('phone_number') or 'Not collected'}",
             f"Country: {user.get('country') or 'Not collected'}",
             f"Lead score: {user.get('engagement_score', 0)}",
-            f"Stage: {user.get('qualification_stage')} / {user.get('lead_temperature')}",
+            f"Interest type: {user_memory.get('user_type') or 'undetermined'}",
+            f"Detected intent: {user_memory.get('detected_intent') or 'Not collected'}",
+            f"Stage: {user_memory.get('display_conversation_stage') or user.get('qualification_stage')} / {user.get('lead_temperature')}",
+            f"Recommended action: {user_memory.get('recommended_next_action') or 'Review and continue guided onboarding'}",
             f"Follow-up required: {user.get('followup_required')}",
             "Recent conversation:",
         ])
@@ -190,6 +229,10 @@ async def generate_daily_report() -> dict[str, Any]:
             "warm_leads": warm_count,
             "hot_leads": hot_count,
             "ready_for_followup": ready_count + len(tasks),
+            "investor_leads": user_type_counts.get("investor", 0),
+            "partner_leads": user_type_counts.get("partner", 0),
+            "hybrid_leads": user_type_counts.get("hybrid", 0),
+            "conversation_stages": dict(stage_counts.most_common(12)),
             "top_interests": dict(product_interest.most_common(8)),
             "common_objections": dict(objections.most_common(8)),
         },

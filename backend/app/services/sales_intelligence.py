@@ -115,6 +115,35 @@ HUMAN_HANDOFF_SIGNALS = [
 
 LOW_INTENT_TERMS = ["what is", "tell me about", "explain", "how does", "how it works", "about aurum"]
 
+GREETING_TERMS = {"hi", "hello", "hey", "/start", "start", "good morning", "good afternoon", "good evening"}
+
+INTENT_KEYWORDS = {
+    "partner_information": [
+        "partner", "partner program", "referral", "refer", "commission", "compensation",
+        "team building", "matching bonus", "rank", "leadership", "webinar", "prospect",
+        "invite friends", "invite people", "no capital", "don't have capital", "dont have capital",
+    ],
+    "investment_information": [
+        "invest", "investment", "deposit", "plan", "minimum", "profit", "return",
+        "withdraw", "earning", "earn", "start with", "ex-ai pro",
+    ],
+    "registration": [
+        "register", "join", "start now", "proceed", "buy credit", "make payment",
+        "activate", "open account", "sign up",
+    ],
+    "human_support": HUMAN_HANDOFF_SIGNALS + ["support", "agent", "person", "human"],
+    "compensation": [
+        "commission", "compensation", "bonus", "matching", "reward", "get paid",
+        "percentage", "percent", "earning opportunity",
+    ],
+    "webinar": ["webinar", "presentation", "training session", "zoom", "meeting"],
+    "product_explanation": [
+        "ex-ai", "ex ai", "exai", "neo bank", "neobank", "zeus", "bot", "product",
+        "service", "wallet", "card",
+    ],
+    "company_overview": ["aurum", "foundation", "what is", "about", "overview", "tell me"],
+}
+
 OBJECTION_PATTERNS = {
     "MONEY_CONCERN": ["not enough", "expensive", "too much", "can't afford", "cannot afford", "no money", "small money"],
     "TRUST_CONCERN": ["scam", "real", "legit", "trust", "proof", "verify", "safe", "who owns"],
@@ -209,6 +238,18 @@ def detect_partner_topics(text: str) -> list[str]:
     return topics
 
 
+def detect_intent(text: str, memory: dict[str, Any]) -> str:
+    lowered = text.lower().strip()
+    if lowered in GREETING_TERMS:
+        return "greeting"
+    for intent in ["human_support", "registration", "compensation", "partner_information", "investment_information", "webinar", "product_explanation", "company_overview"]:
+        if contains_any(lowered, INTENT_KEYWORDS[intent]):
+            return intent
+    if lowered in {"more", "tell me more", "continue", "go on", "explain more"}:
+        return str(memory.get("detected_intent") or "education")
+    return "unknown"
+
+
 def detect_user_type(text: str, memory: dict[str, Any]) -> str:
     lowered = text.lower()
     no_capital = contains_any(lowered, NO_CAPITAL_SIGNALS)
@@ -262,11 +303,37 @@ def infer_stage(text: str, memory: dict[str, Any], lead_score: int, user_type: s
         return "INVESTOR_PROSPECT", "MEDIUM"
     if detect_products(text):
         return "INTERESTED", "MEDIUM"
-    if lowered in {"hi", "hello", "hey", "/start", "start", "good morning", "good afternoon", "good evening"}:
+    if lowered in GREETING_TERMS:
         return "VISITOR", "LOW"
     if any(term in lowered for term in LOW_INTENT_TERMS):
         return "INTERESTED", "LOW"
     return memory.get("conversation_stage") or "INTERESTED", memory.get("intent_level") or "LOW"
+
+
+def display_stage_for(stage: str, user_type: str, intent_level: str, intent: str) -> str:
+    if stage == "HUMAN_HANDOFF" or intent == "human_support":
+        return "Human Handoff"
+    if stage in {"READY_FOR_REGISTRATION", "REGISTRATION_HANDOFF"} or intent == "registration":
+        return "Registration"
+    if stage == "HIGH_INTENT":
+        return "High Intent"
+    if user_type == "partner" or intent in {"partner_information", "compensation", "webinar"}:
+        return "Partner Interest"
+    if user_type == "investor" or intent == "investment_information":
+        return "Investor Interest"
+    if user_type == "hybrid":
+        return "Consideration"
+    if intent == "greeting":
+        return "Greeting"
+    if intent in {"product_explanation", "company_overview"}:
+        return "Education"
+    if intent_level == "HIGH":
+        return "Consideration"
+    if intent_level == "VERY_HIGH":
+        return "Decision"
+    if stage == "INTERESTED":
+        return "Interest"
+    return "Discovery"
 
 
 def keep_forward_stage(previous: str | None, current: str) -> str:
@@ -310,6 +377,7 @@ def analyze_sales_state(user_text: str, memory: dict[str, Any], lead_score: int 
     products = detect_products(user_text)
     partner_topics = detect_partner_topics(user_text)
     objections = detect_objections(user_text)
+    detected_intent = detect_intent(user_text, memory)
     user_type = detect_user_type(user_text, memory)
     stage, intent_level = infer_stage(user_text, memory, lead_score, user_type)
     stage = keep_forward_stage(memory.get("conversation_stage"), stage)
@@ -319,6 +387,8 @@ def analyze_sales_state(user_text: str, memory: dict[str, Any], lead_score: int 
 
     return {
         "conversation_stage": stage,
+        "display_conversation_stage": display_stage_for(stage, user_type, intent_level, detected_intent),
+        "detected_intent": detected_intent,
         "user_type": user_type,
         "intent_level": intent_level,
         "investment_amount": amount,
@@ -334,6 +404,8 @@ def analyze_sales_state(user_text: str, memory: dict[str, Any], lead_score: int 
 
 def apply_sales_state(memory: dict[str, Any], analysis: dict[str, Any], user_text: str, lead_score: int = 0) -> None:
     memory["conversation_stage"] = analysis["conversation_stage"]
+    memory["display_conversation_stage"] = analysis.get("display_conversation_stage")
+    memory["detected_intent"] = analysis.get("detected_intent")
     memory["user_type"] = analysis["user_type"]
     memory["intent_level"] = analysis["intent_level"]
     memory["recommended_next_action"] = analysis["recommended_next_action"]
@@ -356,6 +428,8 @@ def apply_sales_state(memory: dict[str, Any], analysis: dict[str, Any], user_tex
 def sales_state_for_prompt(memory: dict[str, Any]) -> str:
     keys = [
         "conversation_stage",
+        "display_conversation_stage",
+        "detected_intent",
         "user_type",
         "intent_level",
         "investment_interest",

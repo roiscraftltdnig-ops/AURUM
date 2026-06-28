@@ -5,7 +5,7 @@ from fastapi import HTTPException, Request
 from openai import AsyncOpenAI
 from app.core.config import get_settings
 from app.db.supabase import supabase
-from app.services.ai_orchestrator import generate_reply
+from app.services.ai_orchestrator import generate_reply, quality_check_reply
 from app.services.admin_alerts import notify_admins
 from app.services.crm import apply_qualification, create_admin_task, get_or_create_user, load_memory, log_message, save_memory, update_user_profile
 from app.services.rate_limit import allow_event
@@ -19,7 +19,7 @@ def sanitize_text(text: str) -> str:
 
 def clean_name(value: str) -> str | None:
     cleaned = re.sub(r"[^A-Za-z '\-]", "", value).strip()
-    words = [word for word in cleaned.split() if word.lower() not in {"i", "am", "my", "name", "is"}]
+    words = [word for word in cleaned.split() if word.lower() not in {"i", "am", "my", "name", "is", "from", "in"}]
     if not words or words[0].lower() in {"ready", "interested", "new", "beginner"}:
         return None
     return " ".join(words[:2]).title()
@@ -47,7 +47,7 @@ def extract_profile_updates(text: str, memory: dict[str, Any]) -> tuple[dict[str
             updates["country"] = country.title()
             memory_updates["pending_profile_field"] = None
 
-    explicit_name = re.search(r"(?:my name is|i am|i'm|call me)\s+([A-Za-z][A-Za-z '\-]{1,40})", text, re.IGNORECASE)
+    explicit_name = re.search(r"(?:my name is|i am|i'm|call me)\s+([A-Za-z][A-Za-z '\-]{1,40}?)(?:\s+(?:from|in)\b|[,.]|$)", text, re.IGNORECASE)
     if explicit_name and "first_name" not in updates:
         name = clean_name(explicit_name.group(1))
         if name:
@@ -63,10 +63,19 @@ def extract_profile_updates(text: str, memory: dict[str, Any]) -> tuple[dict[str
         memory_updates["preferred_investment_range"] = amount
         updates["investment_intent"] = amount
 
+    language_terms = {
+        "english": "English",
+        "yoruba": "Yoruba",
+        "hausa": "Hausa",
+        "igbo": "Igbo",
+        "french": "French",
+        "pidgin": "Pidgin English",
+    }
+
     country_match = re.search(r"(?:i am from|i'm from|from|in)\s+([A-Za-z][A-Za-z '\-]{1,40})", text, re.IGNORECASE)
     if country_match:
         country = country_match.group(1).strip()
-        if country.lower() not in {"aurum", "this", "here"}:
+        if country.lower() not in {"aurum", "this", "here", *language_terms.keys()} and not any(marker in lowered for marker in ["speak", "language", "prefer", "reply", "use"]):
             updates["country"] = country.title()
 
     if any(term in lowered for term in ["beginner", "new to aurum", "new here", "new investor"]):
@@ -75,6 +84,14 @@ def extract_profile_updates(text: str, memory: dict[str, Any]) -> tuple[dict[str
         memory_updates["experience_level"] = "Experienced investor"
     elif any(term in lowered for term in ["existing member", "already a member", "aurum member", "i have an account"]):
         memory_updates["experience_level"] = "Existing Aurum member"
+
+    for term, label in language_terms.items():
+        if term in lowered and any(marker in lowered for marker in ["speak", "language", "prefer", "reply", "use"]):
+            memory_updates["preferred_language"] = label
+            break
+
+    if any(term in lowered for term in ["attended the webinar", "joined the webinar", "watched the webinar", "was in the webinar"]):
+        memory_updates["webinar_attendance_signal"] = text[:160]
 
     return updates, memory_updates
 
@@ -227,7 +244,8 @@ async def build_lead_summary(user: dict[str, Any], memory: dict[str, Any], score
         f"Country: {profile.get('country') or user.get('country') or 'Not collected'}\n"
         f"Preferred investment range: {memory.get('preferred_investment_range') or user.get('investment_intent') or 'Not collected'}\n"
         f"Interest type: {memory.get('user_type') or 'Undetermined'}\n"
-        f"Conversation stage: {memory.get('conversation_stage') or memory.get('customer_journey_stage') or memory.get('decision_stage') or 'Awareness'}\n"
+        f"Conversation stage: {memory.get('display_conversation_stage') or memory.get('conversation_stage') or memory.get('customer_journey_stage') or memory.get('decision_stage') or 'Awareness'}\n"
+        f"Detected intent: {memory.get('detected_intent') or 'Not collected'}\n"
         f"Intent level: {memory.get('intent_level') or 'Not collected'}\n"
         f"Matched plan: {memory.get('matched_plan') or 'Not collected'} {memory.get('matched_plan_range') or ''}\n"
         f"Concerns/objections: {', '.join(memory.get('concerns') or []) or 'None detected'}\n"
@@ -236,6 +254,8 @@ async def build_lead_summary(user: dict[str, Any], memory: dict[str, Any], score
         f"Lead temperature: {temperature}\n"
         f"Products discussed: {', '.join(memory.get('discussed_products') or []) or 'None yet'}\n"
         f"Partner topics: {', '.join(memory.get('partner_topics') or []) or 'None yet'}\n"
+        f"Preferred language: {memory.get('preferred_language') or 'Not collected'}\n"
+        f"Webinars attended: {len(memory.get('attended_webinars') or [])}\n"
         f"Experience level: {memory.get('experience_level') or 'Not collected'}\n"
         f"Latest user message: {latest_text}\n\n"
         f"Recent conversation history:\n" + "\n".join(conversation_lines)
@@ -389,6 +409,9 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
         user = {**user, **updated_user}
         sync_profile_memory(memory, user)
     for key, value in memory_updates.items():
+        if key == "webinar_attendance_signal":
+            memory.setdefault("attended_webinars", []).append({"noted_at": message.get("date"), "signal": value})
+            continue
         if value is None:
             memory.pop(key, None)
         else:
@@ -409,16 +432,18 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
     new_score = await apply_qualification(user["id"], int(user.get("engagement_score") or 0), ai["qualification"])
     post_score_analysis = analyze_sales_state(text, memory, new_score)
     apply_sales_state(memory, post_score_analysis, text, new_score)
-    if new_score >= 71:
-        memory["customer_journey_stage"] = "High-intent investor"
-    elif new_score >= 50:
-        memory["customer_journey_stage"] = "Interested prospect"
-    elif new_score >= 31:
-        memory["customer_journey_stage"] = "Learning and exploring"
+    if memory.get("display_conversation_stage"):
+        memory["customer_journey_stage"] = memory["display_conversation_stage"]
     elif memory.get("experience_level") == "Existing Aurum member":
         memory["customer_journey_stage"] = "Existing member"
+    elif new_score >= 71:
+        memory["customer_journey_stage"] = "High Intent"
+    elif new_score >= 50:
+        memory["customer_journey_stage"] = "Consideration"
+    elif new_score >= 31:
+        memory["customer_journey_stage"] = "Education"
     else:
-        memory["customer_journey_stage"] = "Curious visitor"
+        memory["customer_journey_stage"] = "Discovery"
     memory["decision_stage"] = decision_stage_for_score(new_score)
     high_intent_alert_needed = new_score >= 80 and not memory.get("high_intent_alert_sent")
     if ai["qualification"].escalation_required:
@@ -427,6 +452,7 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
         followup = profile_followup(memory, user)
         if followup and not ai["text"].strip().endswith("?"):
             ai["text"] = f"{ai['text']}\n\n{followup}"
+    ai["text"] = quality_check_reply(ai["text"], memory, ai.get("topic"))
     memory["last_assistant_asked_question"] = ai["text"].strip().endswith("?")
     memory["last_assistant_message_preview"] = ai["text"][:240]
     await log_message(user["id"], "assistant", ai["text"], {
