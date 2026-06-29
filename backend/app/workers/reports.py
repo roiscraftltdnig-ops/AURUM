@@ -147,6 +147,23 @@ async def generate_daily_report() -> dict[str, Any]:
         if memory_by_user.get(user.get("id"), {}).get("user_type") == "hybrid"
         and (user.get("lead_temperature") == "HOT" or int(user.get("engagement_score") or 0) >= 50)
     )
+    avg_scores: dict[str, int] = {}
+    score_keys = [
+        "investor_score",
+        "partner_score",
+        "buying_intent",
+        "urgency",
+        "trust_level",
+        "referral_potential",
+        "webinar_potential",
+        "activation_probability",
+    ]
+    for key in score_keys:
+        values = [
+            int((memory_by_user.get(user.get("id"), {}).get("opportunity_scores") or {}).get(key) or 0)
+            for user in users
+        ]
+        avg_scores[key] = int(sum(values) / len(values)) if values else 0
 
     interests = _top_lines(product_interest, "No clear product interest yet.")
     objection_lines = _top_lines(objections, "No common objections yet.")
@@ -170,6 +187,8 @@ async def generate_daily_report() -> dict[str, Any]:
         f"Investor leads: {user_type_counts.get('investor', 0)} total / {high_investor_count} warm-hot\n"
         f"Partner leads: {user_type_counts.get('partner', 0)} total / {high_partner_count} warm-hot\n"
         f"Hybrid leads: {user_type_counts.get('hybrid', 0)} total / {high_hybrid_count} warm-hot\n\n"
+        f"*Average opportunity scores*\n"
+        f"Investor: {avg_scores['investor_score']} | Partner: {avg_scores['partner_score']} | Buying intent: {avg_scores['buying_intent']} | Activation: {avg_scores['activation_probability']}\n\n"
         f"*Top interests*\n{interests}\n\n"
         f"*Conversation stages*\n{stage_lines}\n\n"
         f"*Common objections*\n{objection_lines}\n\n"
@@ -185,6 +204,7 @@ async def generate_daily_report() -> dict[str, Any]:
         f"Cold/Warm/Hot: {cold_count}/{warm_count}/{hot_count}",
         f"Investor/Partner/Hybrid leads: {user_type_counts.get('investor', 0)}/{user_type_counts.get('partner', 0)}/{user_type_counts.get('hybrid', 0)}",
         f"Warm-hot investor/partner/hybrid: {high_investor_count}/{high_partner_count}/{high_hybrid_count}",
+        f"Average opportunity scores: {avg_scores}",
         "",
         "Top interests:",
         interests,
@@ -212,8 +232,12 @@ async def generate_daily_report() -> dict[str, Any]:
             f"Lead score: {user.get('engagement_score', 0)}",
             f"Interest type: {user_memory.get('user_type') or 'undetermined'}",
             f"Detected intent: {user_memory.get('detected_intent') or 'Not collected'}",
+            f"Detected intents V4: {', '.join(user_memory.get('detected_intents_v4') or []) or 'Not collected'}",
+            f"Selected playbook: {user_memory.get('selected_playbook') or 'Not collected'}",
+            f"Opportunity scores: {user_memory.get('opportunity_scores') or 'Not collected'}",
             f"Stage: {user_memory.get('display_conversation_stage') or user.get('qualification_stage')} / {user.get('lead_temperature')}",
             f"Recommended action: {user_memory.get('recommended_next_action') or 'Review and continue guided onboarding'}",
+            f"V4 recommendation: {user_memory.get('recommendation') or 'Review and continue guided onboarding'}",
             f"Follow-up required: {user.get('followup_required')}",
             "Recent conversation:",
         ])
@@ -232,6 +256,7 @@ async def generate_daily_report() -> dict[str, Any]:
             "investor_leads": user_type_counts.get("investor", 0),
             "partner_leads": user_type_counts.get("partner", 0),
             "hybrid_leads": user_type_counts.get("hybrid", 0),
+            "average_opportunity_scores": avg_scores,
             "conversation_stages": dict(stage_counts.most_common(12)),
             "top_interests": dict(product_interest.most_common(8)),
             "common_objections": dict(objections.most_common(8)),

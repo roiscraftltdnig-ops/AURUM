@@ -11,6 +11,7 @@ from app.services.sales_intelligence import (
     plan_summary_for_amount,
     sales_state_for_prompt,
 )
+from app.services.sales_intelligence_engine import deterministic_playbook_reply, sales_pipeline_for_prompt
 
 
 ECOSYSTEM_TERMS = [
@@ -241,6 +242,9 @@ You are not a generic ecosystem chatbot, menu bot, PDF reader, or sales script.
 You behave like a professional Aurum sales advisor and customer relationship assistant: conversational, concise, helpful, calm, and consultative.
 You educate users about Aurum Foundation, EX-AI Bot, EX-AI Pro, NeoBank, Zeus AI Bot, investor plans, withdrawals, the Partner Program, referrals, team building, leadership, training, and onboarding.
 Your objective is not just to answer. Your objective is to build understanding, trust, confidence, and engagement through natural conversation.
+You are now operating as a Sales Intelligence System. Before writing, use the supplied sales pipeline: stage, intents, scores, playbook, recommendation, and micro close. Do not bypass it.
+Every qualified response should move the user toward one of these outcomes: invest, join the Partner Program, register for a webinar, request activation, or speak with admin.
+Never end with a dead informational stop. Answer clearly, personalize from memory, recommend the best next step, and close with one natural micro action when appropriate.
 Respect progressive disclosure: do not dump every detail at once. Normal answers must be 2-3 short paragraphs and 50-120 words. Detailed answers are allowed only when the user explicitly asks for detail.
 Use memory. If content was already shared, offer summary, deeper explanation, advanced material, or replay.
 Do not ask a question after every answer. Let the conversation breathe: sometimes answer and pause; sometimes ask one contextual question.
@@ -251,6 +255,7 @@ Handoff direction: when a user shows serious intent, ask for name and phone numb
 Never invent licenses, sales figures, partnerships, or regulatory approvals unless trusted internal Aurum knowledge explicitly supports them.
 Sales direction: guide users from curiosity to an informed decision without pressure. Recognize buying signals, answer clearly, handle objections with empathy, and move the conversation forward naturally.
 Sales memory direction: every reply must consider user_type, conversation_stage, intent_level, investment_interest, products_interested_in, partner_topics, concerns, and recommended_next_action when those exist.
+V4 sales direction: every reply must also consider sales_stage_v4, detected_intents_v4, opportunity_scores, selected_playbook, recommendation, referral_count, risk_tolerance, occupation, income_goal, activation_status, partner_status, and micro_close.
 Unified-path direction: classify users naturally as investor, partner, or hybrid. Never present the Partner Program as a separate bot. If a user lacks capital, move them into the partner journey. If they want to invest and refer, guide both paths together.
 
 Conversation rules:
@@ -258,6 +263,9 @@ Conversation rules:
 - Show you understand the user's intent before explaining. Example: if they ask about opportunities, recognize that they are probably trying to see what is worth exploring.
 - Answer the user's question clearly. Do not ask "what do you know?" before giving useful information.
 - End conversion-related answers with one specific progression question. The question should qualify amount, network, goal, readiness, or desired next step rather than generically asking whether they want more information.
+- If the V4 pipeline supplies a recommendation, use it naturally. Recommendations should be based on budget, goals, referral potential, stage, and official Aurum information.
+- If the V4 pipeline supplies a micro close, use it or write a more natural equivalent. Do not add multiple questions.
+- If the user asks about profit, return, commission, deposit, amount, or comparison, prefer a compact structured answer over long paragraphs.
 - If the user gives a short message, infer the likely intent and move the conversation forward.
 - If the user sends or mentions voice, welcome voice notes and explain that short, clear voice notes work best.
 - Avoid numbered lists unless the user asks for a list or presentation.
@@ -493,6 +501,8 @@ def polish_public_reply(text: str, memory: dict[str, Any], topic: str | None = N
         "REGISTRATION_HANDOFF", "HUMAN_HANDOFF",
     }:
         return cleaned
+    if memory.get("micro_close"):
+        return cleaned
     bridge = conversation_bridge(topic, cleaned)
     if bridge and bridge not in cleaned:
         cleaned = f"{cleaned}\n\n{bridge}"
@@ -506,6 +516,14 @@ def quality_check_reply(text: str, memory: dict[str, Any], topic: str | None = N
             "I can help with that, but I want to keep the answer accurate.\n\n"
             "Which part should we focus on first: Aurum products, the investment plan, or the Partner Program?"
         )
+    micro_close = memory.get("micro_close")
+    if (
+        micro_close
+        and not checked.strip().endswith("?")
+        and "welcome to aurum foundation" not in checked.lower()
+        and str(micro_close).strip() not in checked
+    ):
+        checked = f"{checked}\n\n{micro_close}"
     return checked
 
 
@@ -970,6 +988,11 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
         )
         return {"text": text, "buttons": [], "qualification": qualification, "context": [], "portfolio": portfolio, "topic": topic, "source_labels": [], "confidence": "none", "confidence_score": 0, "missing_knowledge": False, "missing_video": False}
 
+    playbook_text = deterministic_playbook_reply(memory)
+    if playbook_text:
+        text = polish_public_reply(playbook_text, memory, topic)
+        return {"text": text, "buttons": [], "qualification": qualification, "context": [], "portfolio": portfolio, "topic": topic, "source_labels": [], "confidence": "high", "confidence_score": 1, "missing_knowledge": False, "missing_video": False}
+
     sales_text = sales_reply_if_applicable(user_text, memory)
     if sales_text:
         text = polish_public_reply(sales_text, memory, topic)
@@ -1024,6 +1047,7 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
         if key not in INTERNAL_MEMORY_KEYS and value not in (None, "", [], {})
     )
     sales_state = sales_state_for_prompt(memory)
+    sales_pipeline = sales_pipeline_for_prompt(memory)
 
     if not settings.openai_api_key:
         text = polish_public_reply(fallback_answer(topic, user_text), memory, topic)
@@ -1036,7 +1060,7 @@ async def generate_reply(user_text: str, memory: dict[str, Any], resources: dict
             temperature=0.55,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nSales state:\n{sales_state}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. For investor, partner, or hybrid conversion topics, end with one specific progression question about amount, network, goals, readiness, or the next onboarding step. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. If an exact Aurum detail is not officially confirmed in the context, say you do not have official Aurum confirmation for that detail yet and offer representative follow-up."},
+                {"role": "user", "content": f"User message: {user_text}\n\nEffective intent:\n{effective_text}\n\nDetected portfolio: {portfolio or 'Aurum Foundation'}\nCurrent topic: {topic}\nPrevious assistant asked a question: {bool(memory.get('last_assistant_asked_question'))}\n\nResponse directive:\n{directive}\n\nSales state:\n{sales_state}\n\nV4 sales intelligence pipeline:\n{sales_pipeline}\n\nConversation memory:\n{memory_lines}\n\nAurum knowledge to use silently:\n{context}\n\nWrite a natural Telegram reply. Start with a short acknowledgement only when it feels natural, show you understand the user's intent, then answer clearly. Keep normal answers under 120 words and 2-3 short paragraphs. Follow the selected V4 playbook, use the recommendation, and end with the supplied micro close or one natural equivalent. For investor, partner, or hybrid conversion topics, move the user toward amount, network, webinar, activation, or admin handoff. Avoid robotic phrases like 'Would you like to know more?' or 'Would you like me to explain?' Only give a longer answer if the user explicitly asked for detail. Never mention PDFs, documents, files, knowledge bases, uploaded materials, sources, retrieval, confidence, scores, escalation, admin alerts, CRM, or internal processes. If an exact Aurum detail is not officially confirmed in the context, say you do not have official Aurum confirmation for that detail yet and offer representative follow-up."},
             ],
             max_tokens=180,
         )

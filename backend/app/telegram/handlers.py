@@ -10,6 +10,7 @@ from app.services.admin_alerts import notify_admins
 from app.services.crm import apply_qualification, create_admin_task, get_or_create_user, load_memory, log_message, save_memory, update_user_profile
 from app.services.rate_limit import allow_event
 from app.services.sales_intelligence import analyze_sales_state, apply_sales_state
+from app.services.sales_intelligence_engine import analyze_sales_pipeline, apply_sales_pipeline
 from app.services.telegram import telegram
 
 
@@ -245,11 +246,17 @@ async def build_lead_summary(user: dict[str, Any], memory: dict[str, Any], score
         f"Preferred investment range: {memory.get('preferred_investment_range') or user.get('investment_intent') or 'Not collected'}\n"
         f"Interest type: {memory.get('user_type') or 'Undetermined'}\n"
         f"Conversation stage: {memory.get('display_conversation_stage') or memory.get('conversation_stage') or memory.get('customer_journey_stage') or memory.get('decision_stage') or 'Awareness'}\n"
+        f"Sales stage V4: {memory.get('sales_stage_v4') or 'Not collected'}\n"
         f"Detected intent: {memory.get('detected_intent') or 'Not collected'}\n"
+        f"Detected intents V4: {', '.join(memory.get('detected_intents_v4') or []) or 'Not collected'}\n"
         f"Intent level: {memory.get('intent_level') or 'Not collected'}\n"
+        f"Opportunity scores: {memory.get('opportunity_scores') or 'Not collected'}\n"
+        f"Selected playbook: {memory.get('selected_playbook') or 'Not collected'}\n"
         f"Matched plan: {memory.get('matched_plan') or 'Not collected'} {memory.get('matched_plan_range') or ''}\n"
         f"Concerns/objections: {', '.join(memory.get('concerns') or []) or 'None detected'}\n"
+        f"Objection categories: {', '.join(memory.get('objection_categories') or []) or 'None detected'}\n"
         f"Recommended next action: {memory.get('recommended_next_action') or 'Review and continue guided onboarding'}\n"
+        f"V4 recommendation: {memory.get('recommendation') or 'Not collected'}\n"
         f"Lead score: {score}\n"
         f"Lead temperature: {temperature}\n"
         f"Products discussed: {', '.join(memory.get('discussed_products') or []) or 'None yet'}\n"
@@ -257,6 +264,10 @@ async def build_lead_summary(user: dict[str, Any], memory: dict[str, Any], score
         f"Preferred language: {memory.get('preferred_language') or 'Not collected'}\n"
         f"Webinars attended: {len(memory.get('attended_webinars') or [])}\n"
         f"Experience level: {memory.get('experience_level') or 'Not collected'}\n"
+        f"Referral count: {memory.get('referral_count') or 'Not collected'}\n"
+        f"Risk tolerance: {memory.get('risk_tolerance') or 'Not collected'}\n"
+        f"Occupation: {memory.get('occupation') or 'Not collected'}\n"
+        f"Income goal: {memory.get('income_goal') or 'Not collected'}\n"
         f"Latest user message: {latest_text}\n\n"
         f"Recent conversation history:\n" + "\n".join(conversation_lines)
     )
@@ -419,6 +430,8 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
     sync_profile_memory(memory, user)
     sales_analysis = analyze_sales_state(text, memory, int(user.get("engagement_score") or 0))
     apply_sales_state(memory, sales_analysis, text, int(user.get("engagement_score") or 0))
+    sales_pipeline = analyze_sales_pipeline(text, memory)
+    apply_sales_pipeline(memory, sales_pipeline)
     if source in {"voice", "audio"}:
         memory["voice_interaction_enabled"] = True
         text_for_ai = f"The user sent a Telegram {source} note. Transcription: {text}"
@@ -432,6 +445,8 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
     new_score = await apply_qualification(user["id"], int(user.get("engagement_score") or 0), ai["qualification"])
     post_score_analysis = analyze_sales_state(text, memory, new_score)
     apply_sales_state(memory, post_score_analysis, text, new_score)
+    post_sales_pipeline = analyze_sales_pipeline(text, memory)
+    apply_sales_pipeline(memory, post_sales_pipeline)
     if memory.get("display_conversation_stage"):
         memory["customer_journey_stage"] = memory["display_conversation_stage"]
     elif memory.get("experience_level") == "Existing Aurum member":
@@ -464,6 +479,10 @@ async def process_user_text(message: dict[str, Any], raw_text: str, source: str,
         "missing_video": ai.get("missing_video", False),
         "missing_resource": ai.get("missing_resource"),
         "lead_score": new_score,
+        "sales_stage_v4": memory.get("sales_stage_v4"),
+        "detected_intents_v4": memory.get("detected_intents_v4"),
+        "opportunity_scores": memory.get("opportunity_scores"),
+        "selected_playbook": memory.get("selected_playbook"),
     })
     await save_memory(user["id"], memory)
     await telegram.send_message(chat_id, ai["text"])
